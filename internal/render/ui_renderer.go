@@ -117,10 +117,7 @@ func drawWorkersPanel(screen *ebiten.Image, vm ViewModel) {
 		level, _ := worker["level"].(float64)
 		state, _ := worker["state"].(string)
 
-		clr, ok := workerStateColors[state]
-		if !ok {
-			clr = workerStateColors["idle"]
-		}
+		clr := workerLevelColor(int(level))
 		vector.FillRect(screen, float32(x), float32(y+2), 8, 8, clr, false)
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s  Lv%.0f  %s", id, level, state), x+14, y)
 		y += 14

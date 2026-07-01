@@ -105,6 +105,30 @@ function M.assign_worker(state, workerId, levelId, targetCellId, positionCellId,
   return worker, nil
 end
 
+--- Assigns a worker to mine targetCellId without a pre-chosen position: tries
+--- each adjacent cell in turn and uses the first one assign_worker accepts
+--- (open, reachable, not already occupied/claimed from that side).
+function M.assign_worker_to_nearest_cell(state, workerId, levelId, targetCellId, assignmentMode)
+  local level = state.levels[levelId]
+  if not level then
+    return nil, err("level_not_found", "Level not found: " .. tostring(levelId))
+  end
+  local targetCell = level.cells[targetCellId]
+  if not targetCell then
+    return nil, err("cell_not_found", "Target cell not found: " .. tostring(targetCellId))
+  end
+
+  local neighborOffsets = { { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } }
+  for _, off in ipairs(neighborOffsets) do
+    local positionCellId = (targetCell.x + off[1]) .. "," .. (targetCell.y + off[2])
+    local worker, assignErr = M.assign_worker(state, workerId, levelId, targetCellId, positionCellId, assignmentMode)
+    if not assignErr then
+      return worker, nil
+    end
+  end
+  return nil, err("no_open_adjacent_cell", "No free reachable cell adjacent to the target deposit")
+end
+
 function M.stop_worker(state, workerId)
   local worker = state.workers[workerId]
   if not worker then

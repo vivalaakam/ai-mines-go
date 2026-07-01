@@ -175,8 +175,6 @@ test("worker mines a deposit: rock never enters storage, resource does, cell bec
 
   local buy = engine.apply({ type = "buy_worker", workerLevel = 1 })
   assert(buy.ok, "buy_worker failed")
-  local buyStorage = engine.apply({ type = "buy_storage", resourceId = resourceId })
-  assert(buyStorage.ok, "buy_storage failed")
 
   local assign = engine.apply({
     type = "assign_worker_to_target_cell",
@@ -224,66 +222,13 @@ test("worker mines a deposit: rock never enters storage, resource does, cell bec
   end
 end)
 
-test("a full storage blocks only that resource without losing it", function()
+test("storages exist for every resource from the start and never fill up", function()
   engine.new_game("full-storage-seed")
-  local levelView = engine.read({
-    type = "get_level_view",
-    levelId = "level_1",
-    viewport = { x = 0, y = 0, width = 32, height = 32 },
-  }).data
-  local targetId, positionId, targetCell = find_minable_pair(levelView)
-  local resourceId
-  for _, comp in ipairs(targetCell.components) do
-    if comp.type == "resource" then
-      resourceId = comp.resourceId
-    end
+  local storageState = engine.read({ type = "get_storage_state" }).data
+  assert(#storageState.storages > 0, "expected storages to be pre-created for every resource")
+  for _, s in ipairs(storageState.storages) do
+    assert(s.capacity == math.huge, "expected every storage to have unlimited capacity")
   end
-
-  local buy = engine.apply({ type = "buy_worker", workerLevel = 1 })
-  local buyStorage = engine.apply({ type = "buy_storage", resourceId = resourceId })
-  assert(buy.ok and buyStorage.ok, "setup failed")
-
-  -- Shrink the storage to a tiny capacity via the public export/load contract
-  -- (a legitimate way to build fixtures without touching engine internals).
-  local state = engine.export_state()
-  state.storages[buyStorage.data.id].capacity = 3
-  engine.load_state(state)
-
-  assert(
-    engine.apply({
-      type = "assign_worker_to_target_cell",
-      workerId = buy.data.id,
-      levelId = "level_1",
-      targetCellId = targetId,
-      positionCellId = positionId,
-      assignmentMode = "until_completed",
-    }).ok,
-    "assign failed"
-  )
-
-  local sawBlocked = false
-  for i = 1, 250 do
-    local tr = engine.apply({ type = "tick", ticksPassed = 1 })
-    assert(tr.ok, "tick failed")
-    local workers = engine.read({ type = "get_workers" }).data.workers
-    for _, w in ipairs(workers) do
-      if w.state == "blocked_by_storage" then
-        sawBlocked = true
-      end
-    end
-    if sawBlocked then
-      break
-    end
-  end
-  assert(sawBlocked, "expected the worker to become blocked_by_storage once the tiny storage filled up")
-
-  local storageState = engine.read({ type = "get_storage_state" }).data.storages[1]
-  assert(storageState.storedAmount <= storageState.capacity, "storage must never exceed its capacity")
-  assert_eq(
-    storageState.storedAmount,
-    storageState.capacity,
-    "storage should be exactly full, not overflowed or under-filled forever"
-  )
 end)
 
 test("only one worker may occupy a given position cell", function()

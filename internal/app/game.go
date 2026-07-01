@@ -26,6 +26,12 @@ type Game struct {
 	levelID        string
 	mapBounds      *MapBounds
 	ticksSinceSave int
+
+	// lastLevelView caches the level view Draw last fetched, so Update can
+	// hit-test worker drag-and-drop against it without an extra engine.Read
+	// (one frame stale, which is imperceptible for mouse interaction).
+	lastLevelView    map[string]any
+	draggingWorkerID string
 }
 
 // MapBounds is the known-generated extent of the current level, in world

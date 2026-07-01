@@ -1,12 +1,4 @@
-local balance = require("config.balance")
-local resourceConfig = require("config.resources")
-
 local M = {}
-
-local function next_id(state, kind)
-  state.nextIds[kind] = state.nextIds[kind] + 1
-  return kind .. "_" .. (state.nextIds[kind] - 1)
-end
 
 function M.storages_for_resource(state, resourceId)
   local list = {}
@@ -66,44 +58,6 @@ function M.withdraw_resource(state, resourceId, amount)
     remaining = remaining - take
   end
   return amount - remaining
-end
-
-function M.buy_storage(state, resourceId)
-  local resource = resourceConfig.byId[resourceId]
-  if not resource then
-    return nil, { code = "unknown_resource", message = "Unknown resource: " .. tostring(resourceId) }
-  end
-  local cost = balance.storage_purchase_cost(resource)
-  if state.money < cost then
-    return nil, { code = "insufficient_funds", message = "Not enough money to buy storage" }
-  end
-  state.money = state.money - cost
-  local id = next_id(state, "storage")
-  local storage = {
-    id = id,
-    resourceId = resourceId,
-    level = 1,
-    capacity = balance.storage_capacity(resource, 1),
-    storedAmount = 0,
-  }
-  state.storages[id] = storage
-  return storage, nil
-end
-
-function M.upgrade_storage(state, storageId)
-  local storage = state.storages[storageId]
-  if not storage then
-    return nil, { code = "storage_not_found", message = "Storage not found: " .. tostring(storageId) }
-  end
-  local cost = balance.storage_upgrade_cost(storage)
-  if state.money < cost then
-    return nil, { code = "insufficient_funds", message = "Not enough money to upgrade storage" }
-  end
-  local resource = resourceConfig.byId[storage.resourceId]
-  state.money = state.money - cost
-  storage.level = storage.level + 1
-  storage.capacity = balance.storage_capacity(resource, storage.level)
-  return storage, nil
 end
 
 return M

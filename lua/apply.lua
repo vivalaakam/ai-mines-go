@@ -1,6 +1,5 @@
 local tickMod = require("simulation.tick")
 local workersMod = require("simulation.workers")
-local storageMod = require("simulation.storage")
 local ordersMod = require("simulation.orders")
 local levelsMod = require("simulation.levels")
 
@@ -68,20 +67,24 @@ handlers["stop_worker"] = function(state, cmd)
   return ok({ data = worker })
 end
 
-handlers["buy_storage"] = function(state, cmd)
-  local storage, err = storageMod.buy_storage(state, cmd.resourceId)
+-- Drag-and-drop assignment target: only a deposit cell id is known (the drop
+-- point), not a specific adjacent position, so this stops the worker first
+-- (if it was busy elsewhere) and lets Lua pick the nearest free reachable
+-- neighbor cell to mine from.
+handlers["assign_worker_to_deposit"] = function(state, cmd)
+  local worker = state.workers[cmd.workerId]
+  if not worker then
+    return fail({ code = "worker_not_found", message = "Worker not found: " .. tostring(cmd.workerId), details = {} })
+  end
+  if worker.state ~= "idle" then
+    workersMod.stop_worker(state, cmd.workerId)
+  end
+  local assigned, err =
+    workersMod.assign_worker_to_nearest_cell(state, cmd.workerId, cmd.levelId, cmd.targetCellId, cmd.assignmentMode)
   if err then
     return fail(err)
   end
-  return ok({ data = storage })
-end
-
-handlers["upgrade_storage"] = function(state, cmd)
-  local storage, err = storageMod.upgrade_storage(state, cmd.storageId)
-  if err then
-    return fail(err)
-  end
-  return ok({ data = storage })
+  return ok({ data = assigned })
 end
 
 handlers["accept_order"] = function(state, cmd)
