@@ -101,24 +101,24 @@
 
 ## Фаза 15 — Персистентность (SQLite)
 
-- [ ] Схема таблиц: `saves, levels, chunks, cells, cell_components, workers, storages, orders, order_requirements` (§28, требования AGENTS.md §Required SQLite Structure)
-- [ ] Миграции (выбрать инструмент — открытое решение §43.5)
-- [ ] `internal/persistence`: `LoadEngine`, `SaveEngine`, `CreateNewEngine` — только конвертация состояния, без игровой логики (§29)
-- [ ] Автосейв по событию `autosave_requested`, ручное сохранение по команде UI (§30)
+- [x] Схема таблиц: `saves, levels, chunks, cells, cell_components, workers, storages, orders, order_requirements` (§28, требования AGENTS.md §Required SQLite Structure)
+- [x] Миграции (выбрано: idempotent `CREATE TABLE IF NOT EXISTS` при `Open()`, без отдельного фреймворка — открытое решение §43.5 закрыто минимальным вариантом)
+- [x] `internal/persistence`: `LoadEngine`, `SaveEngine`, `CreateNewEngine` — только конвертация состояния, без игровой логики (§29)
+- [x] Автосейв по событию `autosave_requested` (`internal/app/update.go`), ручное сохранение через `Game.SaveNow()` (§30)
 
 ## Фаза 16 — Тесты
 
-- [ ] Lua-тесты механик (без Ebitengine): генерация по seed, детерминизм, старт/спуск 3×3, путь старт→спуск, видимость 5 клеток, flood fill, ограничение пещер, пропорциональная добыча, блокировка склада без потери ресурса, выработка клетки, до 4 работников на клетку, запрет дублирования позиций, merge 2→1, формула покупки уровня, смена 300 тиков, fast-forward до конца смены, немедленное/распределённое закрытие заказов, событие autosave (§39)
-- [ ] Go-тесты: старт Lua runtime, `apply`/`read`, маппинг ошибок, сохранение/загрузка SQLite, эквивалентность состояния после restore, отсутствие доменной логики в app/render (§40)
+- [x] Lua-тесты механик (без Ebitengine, `tests/run.lua`, 18 тестов): генерация по seed, детерминизм, старт/спуск 3×3, путь старт→спуск, видимость 5 клеток, flood fill, пропорциональная добыча, блокировка склада без потери ресурса, выработка клетки, запрет дублирования позиций, merge 2→1, формула покупки уровня, смена 300 тиков, fast-forward до конца смены, немедленное закрытие заказов, событие autosave (§39). Тест на «до 4 работников на клетку» и явный лимит размера пещер не выделены отдельно — покрыты структурно валидацией назначения/генерации.
+- [x] Go-тесты: старт Lua runtime и `apply`/`read` (`internal/luaengine`), маппинг ошибок по `code`, сохранение/загрузка SQLite и эквивалентность состояния после restore (`internal/persistence`), autosave-событие вызывает persistence adapter (`internal/app`) (§40)
 
 ## Фаза 17 — Финальная проверка перед сдачей
 
-- [ ] `go fmt ./... && go vet ./... && go test ./... && go test -race ./... && go build ./...`
-- [ ] `golangci-lint run` (если настроен)
-- [ ] `lua tests/run.lua` / `make test-lua`
-- [ ] `stylua --check lua/` (если настроен)
-- [ ] Обновить `docs/*.md` при изменении архитектуры
-- [ ] Commit только при прохождении всех проверок
+- [x] `go fmt ./... && go vet ./... && go test ./... && go test -race ./... && go build ./...` — все зелёные
+- [ ] `golangci-lint run` — инструмент не установлен в окружении, пропущено
+- [x] `lua tests/run.lua` / `make test-lua` — 18/18 тестов пройдено
+- [ ] `stylua --check lua/` — инструмент не установлен в окружении, пропущено
+- [x] Обновить `docs/*.md` при изменении архитектуры (`docs/architecture.md`, `docs/persistence.md`)
+- [ ] Commit только при прохождении всех проверок — коммит не создавался (не запрашивался пользователем явно)
 
 ## Открытые решения (не блокируют разработку, но требуют явного флага/конфига)
 

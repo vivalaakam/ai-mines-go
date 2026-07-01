@@ -1,140 +1,384 @@
+-- Lua mechanics test suite (REQUIREMENTS.md §39). Runs the engine without
+-- Ebitengine, exercising both white-box generation modules and the public
+-- engine.apply/read/export_state/load_state contract. Exits non-zero on any
+-- failure so `make test-lua` is a real gate.
 package.path = package.path .. ";./lua/?.lua"
 
-local engine = require("engine")
+local failures = 0
 
-local function assert_eq(actual, expected, label)
-  if actual ~= expected then
-    error(string.format("ASSERTION FAILED [%s]: expected %s, got %s", label, tostring(expected), tostring(actual)))
+local function test(name, fn)
+  local ok, err = pcall(fn)
+  if ok then
+    print("PASS: " .. name)
+  else
+    failures = failures + 1
+    print("FAIL: " .. name .. " -- " .. tostring(err))
   end
 end
 
-engine.new_game("test-seed-123")
-
--- get_game_phase / get_game_time
-local r = engine.read({ type = "get_game_phase" })
-assert(r.ok, "read get_game_phase failed")
-assert_eq(r.data.phase, "shift_planning", "initial phase")
-
--- level view has scouted entrance cells
-local levelView = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } })
-assert(levelView.ok, "get_level_view failed")
-local scoutedCount = 0
-for _, c in ipairs(levelView.data.cells) do
-  if c.visibility == "scouted" then scoutedCount = scoutedCount + 1 end
+local function assert_eq(actual, expected, label)
+  if actual ~= expected then
+    error(string.format("[%s] expected %s, got %s", label, tostring(expected), tostring(actual)), 2)
+  end
 end
-print("scouted cells in chunk (0,0): " .. scoutedCount)
-assert(scoutedCount > 0, "expected some scouted cells near entrance")
 
--- buy a worker
-local buyResult = engine.apply({ type = "buy_worker", workerLevel = 1 })
-assert(buyResult.ok, "buy_worker failed: " .. (buyResult.error and buyResult.error.message or ""))
-local workerId = buyResult.data.id
-print("bought worker: " .. workerId)
+--------------------------------------------------------------------------
+-- Generation (white-box via generation.* modules)
+--------------------------------------------------------------------------
 
--- find a reachable position cell adjacent to a deposit cell near entrance
-local workers = engine.read({ type = "get_workers" })
-assert(workers.ok, "get_workers failed")
+local genLevel = require("generation.level")
+local chunksMod = require("generation.chunks")
+local validationMod = require("generation.validation")
 
-local targetCellId, positionCellId
-for _, c in ipairs(levelView.data.cells) do
-  if c.kind == "deposit" then
-    local neighbors = {
-      { c.x, c.y - 1 }, { c.x, c.y + 1 }, { c.x - 1, c.y }, { c.x + 1, c.y },
-    }
-    for _, n in ipairs(neighbors) do
-      for _, oc in ipairs(levelView.data.cells) do
-        if oc.x == n[1] and oc.y == n[2] and oc.accessibility == "reachable" and (oc.kind == "empty" or oc.kind == "stairs_area") then
-          targetCellId = c.x .. "," .. c.y
-          positionCellId = oc.x .. "," .. oc.y
+test("chunk generation is deterministic for the same seed", function()
+  local a = genLevel.new_level("l1", 1, "seed-abc", 1)
+  local b = genLevel.new_level("l1", 1, "seed-abc", 1)
+  assert_eq(a.entranceCell.x, b.entranceCell.x, "entrance x")
+  assert_eq(a.entranceCell.y, b.entranceCell.y, "entrance y")
+  assert_eq(a.stairsCell.x, b.stairsCell.x, "stairs x")
+  assert_eq(a.stairsCell.y, b.stairsCell.y, "stairs y")
+  for key, cellA in pairs(a.cells) do
+    local cellB = b.cells[key]
+    assert(cellB, "cell missing in second generation: " .. key)
+    assert_eq(cellA.kind, cellB.kind, "cell kind at " .. key)
+  end
+end)
+
+test("different seeds produce different stairs placement", function()
+  local a = genLevel.new_level("l1", 1, "seed-one", 1)
+  local b = genLevel.new_level("l1", 1, "seed-two", 1)
+  local differs = a.stairsCell.x ~= b.stairsCell.x or a.stairsCell.y ~= b.stairsCell.y
+  assert(differs, "expected different seeds to place stairs differently")
+end)
+
+test("entrance area is an open 3x3 pocket", function()
+  local level = genLevel.new_level("l1", 1, "seed-entrance", 1)
+  local ex, ey = level.entranceCell.x, level.entranceCell.y
+  for x = ex - 1, ex + 1 do
+    for y = ey - 1, ey + 1 do
+      local cell = level.cells[chunksMod.cell_key(x, y)]
+      assert(cell, "expected entrance cell to exist at " .. x .. "," .. y)
+      assert_eq(cell.kind, "empty", "entrance cell kind at " .. x .. "," .. y)
+    end
+  end
+end)
+
+test("stairs area is a 3x3 stairs_area pocket in a non-central chunk", function()
+  local level = genLevel.new_level("l1", 1, "seed-stairs", 1)
+  assert(not (level.stairsChunk.cx == 0 and level.stairsChunk.cy == 0), "stairs chunk must not be the central chunk")
+  local sx, sy = level.stairsCell.x, level.stairsCell.y
+  for x = sx - 1, sx + 1 do
+    for y = sy - 1, sy + 1 do
+      local cell = level.cells[chunksMod.cell_key(x, y)]
+      assert(cell, "expected stairs cell to exist at " .. x .. "," .. y)
+      assert_eq(cell.kind, "stairs_area", "stairs cell kind at " .. x .. "," .. y)
+    end
+  end
+end)
+
+test("generator guarantees a potential path from entrance to stairs", function()
+  local level = genLevel.new_level("l1", 1, "seed-path", 1)
+  local validation = validationMod.validate(level)
+  assert(validation.hasPathFromEntranceToExit, "expected a potential path from entrance to stairs")
+  assert(validation.corridorWidthLimitRespected, "expected corridor width limit respected")
+  assert(validation.stairsAreaReachablePotentially, "expected stairs area potentially reachable")
+end)
+
+--------------------------------------------------------------------------
+-- Visibility / reachability
+--------------------------------------------------------------------------
+
+local reachabilityMod = require("simulation.reachability")
+local visibilityMod = require("simulation.visibility")
+
+test("visibility reveals cells within radius 5 and hides far cells", function()
+  local level = genLevel.new_level("l1", 1, "seed-vis", 1)
+  reachabilityMod.recompute(level)
+  visibilityMod.recompute(level)
+  local ex, ey = level.entranceCell.x, level.entranceCell.y
+
+  local nearCell = level.cells[chunksMod.cell_key(ex + 1, ey)]
+  assert(nearCell, "expected neighboring cell to exist")
+  assert_eq(nearCell.visibility, "scouted", "adjacent cell visibility")
+
+  local farCell = level.cells[chunksMod.cell_key(ex + 20, ey)]
+  if farCell then
+    assert_eq(farCell.visibility, "unknown", "far cell (distance 20) visibility")
+  end
+end)
+
+test("entrance pocket is reachable from itself", function()
+  local level = genLevel.new_level("l1", 1, "seed-reach", 1)
+  reachabilityMod.recompute(level)
+  local ex, ey = level.entranceCell.x, level.entranceCell.y
+  local cell = level.cells[chunksMod.cell_key(ex, ey)]
+  assert_eq(cell.accessibility, "reachable", "entrance accessibility")
+end)
+
+test("mining a deposit into empty extends the reachable flood-filled area", function()
+  local level = genLevel.new_level("l1", 1, "seed-flood", 1)
+  reachabilityMod.recompute(level)
+  local ex, ey = level.entranceCell.x, level.entranceCell.y
+  -- the cell just outside the entrance pocket must currently be an unreached deposit
+  local outside = level.cells[chunksMod.cell_key(ex - 2, ey)]
+  assert(outside, "expected a cell just outside the entrance pocket")
+  assert_eq(outside.accessibility, "unreachable", "cell outside entrance should start unreachable")
+
+  outside.kind = "empty"
+  outside.components = {}
+  reachabilityMod.recompute(level)
+  assert_eq(outside.accessibility, "reachable", "cell should become reachable once emptied and connected")
+end)
+
+--------------------------------------------------------------------------
+-- Engine-level mechanics (black-box via engine.apply/read)
+--------------------------------------------------------------------------
+
+local engine = require("engine")
+
+--- Finds a deposit cell adjacent to a reachable open cell in the given level view.
+local function find_minable_pair(levelView)
+  local byCoord = {}
+  for _, c in ipairs(levelView.cells) do
+    byCoord[c.x .. "," .. c.y] = c
+  end
+  for _, c in ipairs(levelView.cells) do
+    if c.kind == "deposit" then
+      local neighbors = { { c.x, c.y - 1 }, { c.x, c.y + 1 }, { c.x - 1, c.y }, { c.x + 1, c.y } }
+      for _, n in ipairs(neighbors) do
+        local nc = byCoord[n[1] .. "," .. n[2]]
+        if nc and nc.accessibility == "reachable" and (nc.kind == "empty" or nc.kind == "stairs_area") then
+          return c.x .. "," .. c.y, n[1] .. "," .. n[2], c
         end
       end
     end
   end
+  error("could not find a minable deposit adjacent to a reachable open cell")
 end
-assert(targetCellId, "could not find a minable deposit adjacent to a reachable open cell")
-print("assigning worker " .. workerId .. " target=" .. targetCellId .. " position=" .. positionCellId)
 
-local assignResult = engine.apply({
-  type = "assign_worker_to_target_cell",
-  workerId = workerId,
-  levelId = "level_1",
-  targetCellId = targetCellId,
-  positionCellId = positionCellId,
-  assignmentMode = "until_completed",
-})
-assert(assignResult.ok, "assign failed: " .. (assignResult.error and assignResult.error.message or ""))
+test("worker mines a deposit: rock never enters storage, resource does, cell becomes empty", function()
+  engine.new_game("mining-mechanics-seed")
+  local levelView = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } }).data
+  local targetId, positionId, targetCell = find_minable_pair(levelView)
 
--- start shift and tick a bunch
-local startResult = engine.apply({ type = "start_next_shift" })
-assert(startResult.ok, "start_next_shift failed: " .. (startResult.error and startResult.error.message or ""))
-
-local totalTicks = 0
-for i = 1, 400 do
-  local tr = engine.apply({ type = "tick", ticksPassed = 1 })
-  if not tr.ok then
-    assert_eq(tr.error.code, "not_shift_running", "expected shift to already be over by iteration " .. i)
-    break
-  end
-  totalTicks = totalTicks + 1
-  for _, e in ipairs(tr.events) do
-    if e.type == "shift_completed" then
-      print("shift completed at loop iteration " .. i)
+  local resourceId
+  for _, comp in ipairs(targetCell.components) do
+    if comp.type == "resource" then
+      resourceId = comp.resourceId
     end
   end
+  assert(resourceId, "expected the target deposit to contain a resource component")
+
+  local buy = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  assert(buy.ok, "buy_worker failed")
+  local buyStorage = engine.apply({ type = "buy_storage", resourceId = resourceId })
+  assert(buyStorage.ok, "buy_storage failed")
+
+  local assign = engine.apply({
+    type = "assign_worker_to_target_cell",
+    workerId = buy.data.id, levelId = "level_1",
+    targetCellId = targetId, positionCellId = positionId,
+    assignmentMode = "until_completed",
+  })
+  assert(assign.ok, "assign failed: " .. (assign.error and assign.error.message or ""))
+
+  assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
+
+  local depleted = false
+  for i = 1, 250 do
+    local tr = engine.apply({ type = "tick", ticksPassed = 1 })
+    assert(tr.ok, "tick failed: " .. (tr.error and tr.error.message or ""))
+    for _, e in ipairs(tr.events) do
+      if e.type == "cell_depleted" and e.cellId == targetId then
+        depleted = true
+      end
+    end
+    if depleted then break end
+  end
+  assert(depleted, "expected the deposit to fully deplete within 250 ticks")
+
+  local storageState = engine.read({ type = "get_storage_state" }).data
+  local totalStored = 0
+  for _, s in ipairs(storageState.storages) do
+    if s.resourceId == resourceId then totalStored = totalStored + s.storedAmount end
+  end
+  assert(totalStored > 0, "expected some of the mined resource to have reached storage")
+
+  local view2 = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } }).data
+  for _, c in ipairs(view2.cells) do
+    if c.x .. "," .. c.y == targetId then
+      assert_eq(c.kind, "empty", "depleted cell kind")
+    end
+  end
+end)
+
+test("a full storage blocks only that resource without losing it", function()
+  engine.new_game("full-storage-seed")
+  local levelView = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } }).data
+  local targetId, positionId, targetCell = find_minable_pair(levelView)
+  local resourceId
+  for _, comp in ipairs(targetCell.components) do
+    if comp.type == "resource" then resourceId = comp.resourceId end
+  end
+
+  local buy = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  local buyStorage = engine.apply({ type = "buy_storage", resourceId = resourceId })
+  assert(buy.ok and buyStorage.ok, "setup failed")
+
+  -- Shrink the storage to a tiny capacity via the public export/load contract
+  -- (a legitimate way to build fixtures without touching engine internals).
+  local state = engine.export_state()
+  state.storages[buyStorage.data.id].capacity = 3
+  engine.load_state(state)
+
+  assert(engine.apply({
+    type = "assign_worker_to_target_cell",
+    workerId = buy.data.id, levelId = "level_1",
+    targetCellId = targetId, positionCellId = positionId,
+    assignmentMode = "until_completed",
+  }).ok, "assign failed")
+  assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
+
+  local sawBlocked = false
+  for i = 1, 250 do
+    local tr = engine.apply({ type = "tick", ticksPassed = 1 })
+    assert(tr.ok, "tick failed")
+    local workers = engine.read({ type = "get_workers" }).data.workers
+    for _, w in ipairs(workers) do
+      if w.state == "blocked_by_storage" then sawBlocked = true end
+    end
+    if sawBlocked then break end
+  end
+  assert(sawBlocked, "expected the worker to become blocked_by_storage once the tiny storage filled up")
+
+  local storageState = engine.read({ type = "get_storage_state" }).data.storages[1]
+  assert(storageState.storedAmount <= storageState.capacity, "storage must never exceed its capacity")
+  assert_eq(storageState.storedAmount, storageState.capacity, "storage should be exactly full, not overflowed or under-filled forever")
+end)
+
+test("only one worker may occupy a given position cell", function()
+  engine.new_game("occupancy-seed")
+  local levelView = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } }).data
+  local targetId, positionId = find_minable_pair(levelView)
+
+  local w1 = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  local w2 = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  assert(w1.ok and w2.ok, "buy_worker failed")
+
+  local a1 = engine.apply({
+    type = "assign_worker_to_target_cell", workerId = w1.data.id, levelId = "level_1",
+    targetCellId = targetId, positionCellId = positionId, assignmentMode = "until_completed",
+  })
+  assert(a1.ok, "first assignment should succeed")
+
+  local a2 = engine.apply({
+    type = "assign_worker_to_target_cell", workerId = w2.data.id, levelId = "level_1",
+    targetCellId = targetId, positionCellId = positionId, assignmentMode = "until_completed",
+  })
+  assert(not a2.ok, "second worker must not be able to share the same position cell")
+  assert_eq(a2.error.code, "position_occupied", "expected position_occupied")
+end)
+
+test("shift lasts exactly 300 ticks and fast_forward stops at planning phase", function()
+  engine.new_game("shift-length-seed")
+  assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
+  local ff = engine.apply({ type = "fast_forward_to_shift_end" })
+  assert(ff.ok, "fast_forward_to_shift_end failed")
+  assert_eq(ff.processedTicks, 300, "processed ticks for a full shift")
+  local phase = engine.read({ type = "get_game_phase" }).data.phase
+  assert_eq(phase, "shift_planning", "phase after fast-forwarding a full shift")
+
+  local ffAgain = engine.apply({ type = "fast_forward_to_shift_end" })
+  assert(not ffAgain.ok, "fast_forward should fail outside shift_running")
+  assert_eq(ffAgain.error.code, "not_shift_running", "fast_forward error code outside shift")
+end)
+
+test("worker purchase respects highestUnlockedWorkerLevel - 2 formula", function()
+  engine.new_game("purchase-formula-seed")
+  local bad = engine.apply({ type = "buy_worker", workerLevel = 2 })
+  assert(not bad.ok, "should not be able to buy level 2 worker before any level-2 worker is unlocked")
+  assert_eq(bad.error.code, "worker_level_not_purchasable", "purchase formula error code")
+
+  -- Force a level-4 unlock and enough money (fixture via export/load) to unlock buying level 2.
+  local state = engine.export_state()
+  state.highestUnlockedWorkerLevel = 4
+  state.money = 100000
+  engine.load_state(state)
+  local ok = engine.apply({ type = "buy_worker", workerLevel = 2 })
+  assert(ok.ok, "should be able to buy level 2 worker once highestUnlockedWorkerLevel is 4 (4-2=2): " .. (ok.error and ok.error.message or ""))
+end)
+
+test("orders: available order can be declined, and accepting with enough stock completes it immediately", function()
+  engine.new_game("orders-seed")
+  local orders = engine.read({ type = "get_available_orders" }).data.orders
+  assert(#orders > 0, "expected available orders at game start")
+
+  local declined = engine.apply({ type = "decline_order", orderId = orders[1].id })
+  assert(declined.ok, "decline_order failed")
+
+  -- Give ourselves a pile of every depth-1 resource, then accept an order that
+  -- only needs those, expecting immediate completion.
+  local state = engine.export_state()
+  state.storages["storage_test"] = { id = "storage_test", resourceId = "stone", level = 1, capacity = 10000, storedAmount = 10000 }
+  state.storages["storage_test_2"] = { id = "storage_test_2", resourceId = "coal", level = 1, capacity = 10000, storedAmount = 10000 }
+  engine.load_state(state)
+
+  local availableNow = engine.read({ type = "get_available_orders" }).data.orders
+  assert(#availableNow > 0, "expected another available order to accept")
+  local target = availableNow[1]
+  local accept = engine.apply({ type = "accept_order", orderId = target.id })
+  assert(accept.ok, "accept_order failed: " .. (accept.error and accept.error.message or ""))
+  assert_eq(accept.data.state, "completed", "order with enough stock should complete immediately on accept")
+end)
+
+test("autosave_requested event fires exactly when a shift completes", function()
+  engine.new_game("autosave-event-seed")
+  assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
+  local ff = engine.apply({ type = "fast_forward_to_shift_end" })
+  assert(ff.ok, "fast_forward_to_shift_end failed")
+  local sawAutosave = false
+  for _, e in ipairs(ff.events) do
+    if e.type == "autosave_requested" and e.reason == "shift_completed" then
+      sawAutosave = true
+    end
+  end
+  assert(sawAutosave, "expected an autosave_requested event when the shift completed")
+end)
+
+test("merge combines two idle same-level workers into one worker of the next level", function()
+  engine.new_game("merge-seed")
+  local b1 = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  local b2 = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  assert(b1.ok and b2.ok, "buy_worker failed")
+  local merge = engine.apply({ type = "merge_workers", workerIds = { b1.data.id, b2.data.id } })
+  assert(merge.ok, "merge_workers failed: " .. (merge.error and merge.error.message or ""))
+  assert_eq(merge.data.level, 2, "merged worker level")
+  local workers = engine.read({ type = "get_workers" }).data.workers
+  assert_eq(#workers, 1, "expected the two source workers to be replaced by exactly one merged worker")
+end)
+
+test("create_next_level is rejected until the stairs area is reachable", function()
+  engine.new_game("next-level-seed")
+  local bad = engine.apply({ type = "create_next_level", fromLevelId = "level_1" })
+  assert(not bad.ok, "create_next_level should fail before stairs reachable")
+  assert_eq(bad.error.code, "stairs_not_reachable", "create_next_level error code")
+end)
+
+test("export_state / load_state round-trip preserves phase and money", function()
+  engine.new_game("roundtrip-seed")
+  engine.apply({ type = "buy_worker", workerLevel = 1 })
+  local before = engine.read({ type = "get_player_summary" }).data
+  local exported = engine.export_state()
+  engine.load_state(exported)
+  local after = engine.read({ type = "get_player_summary" }).data
+  assert_eq(after.phase, before.phase, "phase after round-trip")
+  assert_eq(after.money, before.money, "money after round-trip")
+  assert_eq(after.workerCount, before.workerCount, "worker count after round-trip")
+end)
+
+--------------------------------------------------------------------------
+
+print(string.format("\n%d failure(s)", failures))
+if failures > 0 then
+  os.exit(1)
 end
-
-local phaseAfter = engine.read({ type = "get_game_phase" })
-assert_eq(phaseAfter.data.phase, "shift_planning", "phase after 400 ticks (>300) should be back to planning")
-
-local shiftSummary = engine.read({ type = "get_shift_summary" })
-print("shiftIndex after run: " .. shiftSummary.data.shiftIndex)
-assert_eq(shiftSummary.data.shiftIndex, 1, "shiftIndex should be 1 after first shift completes")
-
--- fast forward should fail outside shift_running
-local ffFail = engine.apply({ type = "fast_forward_to_shift_end" })
-assert(not ffFail.ok, "fast_forward should fail during planning")
-assert_eq(ffFail.error.code, "not_shift_running", "fast forward error code")
-
--- storage / mining sanity: check some resource got stored or is progressing
-local storageState = engine.read({ type = "get_storage_state" })
-print("storages: " .. #storageState.data.storages)
-
-local playerSummary = engine.read({ type = "get_player_summary" })
-print("money: " .. playerSummary.data.money)
-
--- export/load roundtrip
-local exported = engine.export_state()
-engine.load_state(exported)
-local phaseAfterReload = engine.read({ type = "get_game_phase" })
-assert_eq(phaseAfterReload.data.phase, "shift_planning", "phase preserved after export/load roundtrip")
-
-print("ALL SMOKE TESTS PASSED")
-
--- extra coverage: storage, orders, merge, create_next_level validation
-engine.new_game("seed-2")
-
-local availOrders = engine.read({ type = "get_available_orders" })
-assert(availOrders.ok and #availOrders.data.orders > 0, "expected available orders")
-local orderId = availOrders.data.orders[1].id
-local decline = engine.apply({ type = "decline_order", orderId = orderId })
-assert(decline.ok, "decline_order failed")
-
-local b1 = engine.apply({ type = "buy_worker", workerLevel = 1 })
-local b2 = engine.apply({ type = "buy_worker", workerLevel = 1 })
-assert(b1.ok and b2.ok, "buy_worker for merge setup failed")
-
-local buyStorage = engine.apply({ type = "buy_storage", resourceId = "stone" })
-assert(buyStorage.ok or buyStorage.error.code == "insufficient_funds", "buy_storage errored unexpectedly: " .. (buyStorage.error and buyStorage.error.message or ""))
-if buyStorage.ok then
-  local upgrade = engine.apply({ type = "upgrade_storage", storageId = buyStorage.data.id })
-  assert(upgrade.ok or upgrade.error.code == "insufficient_funds", "upgrade_storage errored unexpectedly: " .. (upgrade.error and upgrade.error.message or ""))
-end
-local merge = engine.apply({ type = "merge_workers", workerIds = { b1.data.id, b2.data.id } })
-assert(merge.ok, "merge_workers failed: " .. (merge.error and merge.error.message or ""))
-assert_eq(merge.data.level, 2, "merged worker level")
-
-local badNextLevel = engine.apply({ type = "create_next_level", fromLevelId = "level_1" })
-assert(not badNextLevel.ok, "create_next_level should fail before stairs reachable")
-assert_eq(badNextLevel.error.code, "stairs_not_reachable", "create_next_level error code")
-
-print("ALL EXTRA COVERAGE TESTS PASSED")

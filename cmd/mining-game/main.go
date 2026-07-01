@@ -1,28 +1,48 @@
 package main
 
 import (
+	"database/sql"
+	"errors"
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
 	"github.com/vivalaakam/ai-mines-go/internal/app"
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
+	"github.com/vivalaakam/ai-mines-go/internal/persistence"
 )
 
-const devSeedPhrase = "dev-seed"
+const (
+	saveDBPath    = "./save.db"
+	saveID        = "default"
+	devSeedPhrase = "dev-seed"
+)
 
 func main() {
-	engine, err := luaengine.New()
+	store, err := persistence.Open(saveDBPath)
 	if err != nil {
-		log.Fatalf("failed to start lua engine: %v", err)
+		log.Fatalf("failed to open save database: %v", err)
+	}
+	defer store.Close()
+
+	var engine *luaengine.Engine
+	loaded, err := store.LoadEngine(saveID)
+	switch {
+	case err == nil:
+		engine = loaded
+		log.Printf("loaded existing save %q", saveID)
+	case errors.Is(err, sql.ErrNoRows):
+		engine, err = store.CreateNewEngine(saveID, devSeedPhrase)
+		if err != nil {
+			log.Fatalf("failed to start new game: %v", err)
+		}
+		log.Printf("created new save %q", saveID)
+	default:
+		log.Fatalf("failed to load save %q: %v", saveID, err)
 	}
 	defer engine.Close()
 
-	if err := engine.NewGame(devSeedPhrase); err != nil {
-		log.Fatalf("failed to start new game: %v", err)
-	}
-
-	game := app.NewGame(engine, "level_1")
+	game := app.NewGame(engine, store, saveID, "level_1")
 
 	ebiten.SetWindowSize(1280, 720)
 	ebiten.SetWindowTitle("Idle Mining Game")

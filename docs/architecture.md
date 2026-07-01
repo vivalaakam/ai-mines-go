@@ -11,9 +11,10 @@ cmd/mining-game       Go entry point
 internal/app          Ebitengine window, Update/Draw loop, input, camera, accumulator
 internal/render       Map/worker/UI rendering from Lua view-models
 internal/luaengine    Go<->Lua bridge (runtime, apply, read, bindings)
-internal/persistence  SQLite adapter (not yet implemented)
-internal/application  Cross-cutting app-layer helpers (autosave orchestration, etc.)
+internal/persistence  SQLite adapter (see docs/persistence.md)
+internal/application  Cross-cutting app-layer helpers (currently unused; reserved
+                      for orchestration that doesn't belong in internal/app or
+                      internal/persistence as the project grows)
 lua/                  Authoritative Lua game engine (see engine.lua)
+tests/run.lua         Lua mechanics test suite (run via `make test-lua`)
 ```
-
-Persistence (SQLite adapter, migrations) is not implemented yet.

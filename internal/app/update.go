@@ -39,8 +39,9 @@ func (g *Game) Update() error {
 	return nil
 }
 
-// handleLuaEvents reacts to events returned by apply. Persistence (Phase 15) is
-// not implemented yet, so autosave_requested is only logged for now.
+// handleLuaEvents reacts to events returned by apply. Lua never writes to
+// SQLite itself (REQUIREMENTS.md §30) - the app layer is responsible for
+// calling the persistence adapter when an autosave_requested event arrives.
 func (g *Game) handleLuaEvents(events []any) {
 	for _, raw := range events {
 		event, ok := raw.(map[string]any)
@@ -49,11 +50,32 @@ func (g *Game) handleLuaEvents(events []any) {
 		}
 		switch event["type"] {
 		case "autosave_requested":
-			log.Printf("autosave requested: reason=%v", event["reason"])
+			g.autosave(event["reason"])
 		case "shift_completed":
 			log.Printf("shift completed: shiftIndex=%v", event["shiftIndex"])
 		case "order_completed":
 			log.Printf("order completed: orderId=%v", event["orderId"])
 		}
 	}
+}
+
+func (g *Game) autosave(reason any) {
+	if g.store == nil || g.saveID == "" {
+		log.Printf("autosave requested (no store configured): reason=%v", reason)
+		return
+	}
+	if err := g.store.SaveEngine(g.engine, g.saveID); err != nil {
+		log.Printf("autosave failed: reason=%v err=%v", reason, err)
+		return
+	}
+	log.Printf("autosave completed: reason=%v", reason)
+}
+
+// SaveNow performs a manual save, e.g. bound to a UI command or hotkey
+// (REQUIREMENTS.md §30: "Manual save is also allowed from planning phase").
+func (g *Game) SaveNow() error {
+	if g.store == nil || g.saveID == "" {
+		return nil
+	}
+	return g.store.SaveEngine(g.engine, g.saveID)
 }
