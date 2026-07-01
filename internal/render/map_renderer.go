@@ -90,16 +90,35 @@ func drawHoveredCell(screen *ebiten.Image, vm ViewModel, cells []any, size float
 		if !ok {
 			continue
 		}
-		name := resourceName(vm, component["resourceId"])
 		remaining, _ := component["remainingAmount"].(float64)
-		lines = append(lines, fmt.Sprintf("%s: %.0f", name, remaining))
+		lines = append(lines, fmt.Sprintf("%s: %.0f", componentName(vm, component), remaining))
 	}
 
 	tx, ty := mx+16, my+8
+	maxLen := 0
+	for _, line := range lines {
+		if len(line) > maxLen {
+			maxLen = len(line)
+		}
+	}
+	bgW := float32(maxLen*6 + 8)
+	bgH := float32(len(lines)*14 + 8)
+	vector.FillRect(screen, float32(tx-4), float32(ty-4), bgW, bgH, color.RGBA{20, 20, 24, 220}, false)
+
 	for _, line := range lines {
 		ebitenutil.DebugPrintAt(screen, line, tx, ty)
 		ty += 14
 	}
+}
+
+// componentName labels a deposit component for the tooltip: "rock" components
+// carry no resourceId (REQUIREMENTS.md deposit mix is rock + one resource), so
+// they get a fixed "Rock" label instead of an empty lookup miss.
+func componentName(vm ViewModel, component map[string]any) string {
+	if componentType, _ := component["type"].(string); componentType == "rock" {
+		return "Rock"
+	}
+	return resourceName(vm, component["resourceId"])
 }
 
 // resourceName looks up a resource's display name from vm.Resources (populated
