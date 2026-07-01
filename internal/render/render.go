@@ -44,7 +44,6 @@ type ViewModel struct {
 	Camera        Camera
 	LevelView     map[string]any
 	PlayerSummary map[string]any
-	ShiftSummary  map[string]any
 	Workers       map[string]any
 	Resources     map[string]any
 }

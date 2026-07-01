@@ -14,17 +14,12 @@ local function ok(result)
     patch = result.patch or {},
     processedTicks = result.processedTicks,
     remainingTicks = result.remainingTicks,
-    shiftIndex = result.shiftIndex,
     data = result.data,
   }
 end
 
 local function fail(errObj)
   return { ok = false, error = errObj }
-end
-
-local function planning_only(errCode, message)
-  return { code = errCode, message = message, details = {} }
 end
 
 local handlers = {}
@@ -37,26 +32,7 @@ handlers["tick"] = function(state, cmd)
   return ok(result)
 end
 
-handlers["fast_forward_to_shift_end"] = function(state, cmd)
-  local result, err = tickMod.fast_forward_to_shift_end(state)
-  if err then
-    return fail(err)
-  end
-  return ok(result)
-end
-
-handlers["start_next_shift"] = function(state, cmd)
-  local result, err = tickMod.start_next_shift(state)
-  if err then
-    return fail(err)
-  end
-  return ok(result)
-end
-
 handlers["buy_worker"] = function(state, cmd)
-  if state.phase ~= "shift_planning" then
-    return fail(planning_only("not_in_planning", "Worker purchase only allowed during planning"))
-  end
   local worker, err = workersMod.buy_worker(state, cmd.workerLevel)
   if err then
     return fail(err)
@@ -68,9 +44,6 @@ handlers["buy_worker"] = function(state, cmd)
 end
 
 handlers["merge_workers"] = function(state, cmd)
-  if state.phase ~= "shift_planning" then
-    return fail(planning_only("not_in_planning", "Merge only allowed during planning"))
-  end
   local worker, err = workersMod.merge_workers(state, cmd.workerIds)
   if err then
     return fail(err)
@@ -79,11 +52,6 @@ handlers["merge_workers"] = function(state, cmd)
 end
 
 handlers["assign_worker_to_target_cell"] = function(state, cmd)
-  if state.phase == "shift_running" and not state.rulesConfig.allowWorkerReassignmentDuringShift then
-    return fail(
-      planning_only("reassignment_disallowed_during_shift", "Worker (re)assignment is disabled during shift_running")
-    )
-  end
   local worker, err =
     workersMod.assign_worker(state, cmd.workerId, cmd.levelId, cmd.targetCellId, cmd.positionCellId, cmd.assignmentMode)
   if err then
@@ -101,9 +69,6 @@ handlers["stop_worker"] = function(state, cmd)
 end
 
 handlers["buy_storage"] = function(state, cmd)
-  if state.phase ~= "shift_planning" then
-    return fail(planning_only("not_in_planning", "Storage purchase only allowed during planning"))
-  end
   local storage, err = storageMod.buy_storage(state, cmd.resourceId)
   if err then
     return fail(err)
@@ -112,9 +77,6 @@ handlers["buy_storage"] = function(state, cmd)
 end
 
 handlers["upgrade_storage"] = function(state, cmd)
-  if state.phase ~= "shift_planning" then
-    return fail(planning_only("not_in_planning", "Storage upgrade only allowed during planning"))
-  end
   local storage, err = storageMod.upgrade_storage(state, cmd.storageId)
   if err then
     return fail(err)
@@ -123,9 +85,6 @@ handlers["upgrade_storage"] = function(state, cmd)
 end
 
 handlers["accept_order"] = function(state, cmd)
-  if state.phase ~= "shift_planning" then
-    return fail(planning_only("not_in_planning", "Orders can only be managed during planning"))
-  end
   local order, err = ordersMod.accept_order(state, cmd.orderId)
   if err then
     return fail(err)
@@ -134,9 +93,6 @@ handlers["accept_order"] = function(state, cmd)
 end
 
 handlers["decline_order"] = function(state, cmd)
-  if state.phase ~= "shift_planning" then
-    return fail(planning_only("not_in_planning", "Orders can only be managed during planning"))
-  end
   local order, err = ordersMod.decline_order(state, cmd.orderId)
   if err then
     return fail(err)
@@ -145,9 +101,6 @@ handlers["decline_order"] = function(state, cmd)
 end
 
 handlers["set_order_priority"] = function(state, cmd)
-  if state.phase ~= "shift_planning" then
-    return fail(planning_only("not_in_planning", "Orders can only be managed during planning"))
-  end
   local order, err = ordersMod.set_order_priority(state, cmd.orderId, cmd.priority)
   if err then
     return fail(err)

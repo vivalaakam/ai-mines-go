@@ -101,15 +101,15 @@ func (a *Adapter) saveState(saveID string, state map[string]any) error {
 
 	_, err = tx.Exec(`
 		INSERT INTO saves (
-			id, seed_phrase, generator_version, schema_version, tick, shift_index, phase, money,
+			id, seed_phrase, generator_version, schema_version, tick, money,
 			highest_unlocked_worker_level, next_worker_id, next_storage_id, next_order_id, next_level_id,
-			allow_worker_reassignment_during_shift, order_allocation_mode
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			order_allocation_mode
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		saveID, str(state, "seedPhrase"), int(num(state, "generatorVersion")), int(num(state, "schemaVersion")),
-		int(num(gameTime, "tick")), int(num(gameTime, "shiftIndex")), str(state, "phase"), num(state, "money"),
+		int(num(gameTime, "tick")), num(state, "money"),
 		int(num(state, "highestUnlockedWorkerLevel")), int(num(nextIDs, "worker")), int(num(nextIDs, "storage")),
 		int(num(nextIDs, "order")), int(num(nextIDs, "level")),
-		boolean(rules, "allowWorkerReassignmentDuringShift"), str(rules, "orderAllocationMode"),
+		str(rules, "orderAllocationMode"),
 	)
 	if err != nil {
 		return fmt.Errorf("inserting save: %w", err)

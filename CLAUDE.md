@@ -16,13 +16,13 @@ Idle mining / exploration game (inspired by Deep Corp and Gold & Goblins) to be 
 
 ## The Core Architectural Rule
 
-**All gameplay mechanics, state mutations, simulation rules, validation, economy, generation, workers, orders, storage, visibility, reachability, shifts, and tick processing must live in Lua.** Go/Ebitengine are infrastructure and presentation only — they must never become a source of gameplay rules. If a piece of logic answers "what should happen according to the game rules?", it belongs in Lua, not Go.
+**All gameplay mechanics, state mutations, simulation rules, validation, economy, generation, workers, orders, storage, visibility, reachability, and tick processing must live in Lua.** Go/Ebitengine are infrastructure and presentation only — they must never become a source of gameplay rules. If a piece of logic answers "what should happen according to the game rules?", it belongs in Lua, not Go.
 
 ## Layered Architecture
 
 1. **Go Ebitengine App** (`/internal/app`) — window, main loop, input, camera, calls into Lua, invokes persistence on autosave/manual save.
-2. **Go Render/UI Layer** (`/internal/render`) — draws map/workers/storage/orders/shift-planning UI from `read`-derived view-models only; holds local hover/selection/camera state; never mutates authoritative state.
-3. **Lua Game Engine** (`/lua`) — the single source of truth: domain state, command validation, chunk/level generation, tick/shift processing, mining, workers, merge, storage, orders, visibility, reachability, flood fill. Must be testable without Ebitengine.
+2. **Go Render/UI Layer** (`/internal/render`) — draws map/workers/storage/orders UI from `read`-derived view-models only; holds local hover/selection/camera state; never mutates authoritative state.
+3. **Lua Game Engine** (`/lua`) — the single source of truth: domain state, command validation, chunk/level generation, tick processing, mining, workers, merge, storage, orders, visibility, reachability, flood fill. Must be testable without Ebitengine.
 4. **Go SQLite Persistence Adapter** (`/internal/persistence`) — runs migrations, converts between SQLite rows and Lua-compatible state, calls `export_state`/`load_state`. Contains **no** gameplay logic.
 
 ### The only allowed Go↔Lua interface
@@ -38,14 +38,12 @@ Go must branch on `error.code`, never parse `error.message`. No other system may
 
 ### Game time model
 
-- 1 tick = 1 second; 1 shift = 300 ticks (5 minutes).
-- Time only advances via `engine.apply({type="tick", ...})` or `fast_forward_to_shift_end`; a single `tick` call must never cross more than one shift boundary (excess ticks are reported back via `remainingTicks`).
-- Two phases: `shift_running` and `shift_planning`. Purchases, merges, storage upgrades, and order actions are only valid during `shift_planning`.
+- 1 tick = 1 second. There are no shifts or phases: time advances continuously via `engine.apply({type="tick", ...})`, and purchases, merges, storage upgrades, worker (re)assignment, and order actions are valid at any time.
 - The Ebitengine `Update()` loop must accumulate real frames into whole game ticks (see accumulator pattern in `AGENTS.md`/`REQUIREMENTS.md` §34) rather than simulating anything itself; `Draw()` must never mutate authoritative state.
 
 ### Persistence
 
-Saves must use structured SQLite tables (`saves, levels, chunks, cells, cell_components, workers, storages, orders, order_requirements`), never a single JSON blob. After a shift ends, Lua returns an `autosave_requested` event; the Go app layer (not Lua) is responsible for invoking the persistence adapter.
+Saves must use structured SQLite tables (`saves, levels, chunks, cells, cell_components, workers, storages, orders, order_requirements`), never a single JSON blob. Autosave is triggered periodically by the Go app layer (not Lua) on a fixed tick interval; Lua may still emit an `autosave_requested` event for other triggers, and the Go app layer is responsible for invoking the persistence adapter.
 
 Full command/query lists, cell/worker/storage/order data models, map-generation rules (chunked, seeded, deterministic, 5×5 starting chunk area, 3×3 entrance/stairs zones), and worker merge/purchase formulas are specified in detail in `AGENTS.md` and `REQUIREMENTS.md` — consult them before implementing any of these systems.
 
@@ -68,4 +66,4 @@ Prefer a single `make check` once a Makefile exists. **Only commit if all checks
 
 ## Open Design Decisions
 
-Several mechanics are intentionally unresolved in the spec (worker reassignment during `shift_running`, exact worker/order/storage cost formulas, cave-size limits, choice of Lua VM binding, SQLite migration framework). Do not hard-code a resolution to these unless the task explicitly asks you to decide one — prefer config-driven behavior (e.g. `rulesConfig.allowWorkerReassignmentDuringShift`).
+Several mechanics are intentionally unresolved in the spec (exact worker/order/storage cost formulas, cave-size limits, choice of Lua VM binding, SQLite migration framework). Do not hard-code a resolution to these unless the task explicitly asks you to decide one — prefer config-driven behavior.

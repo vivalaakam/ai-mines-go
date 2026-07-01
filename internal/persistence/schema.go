@@ -11,15 +11,12 @@ CREATE TABLE IF NOT EXISTS saves (
 	generator_version INTEGER NOT NULL,
 	schema_version INTEGER NOT NULL,
 	tick INTEGER NOT NULL,
-	shift_index INTEGER NOT NULL,
-	phase TEXT NOT NULL,
 	money REAL NOT NULL,
 	highest_unlocked_worker_level INTEGER NOT NULL,
 	next_worker_id INTEGER NOT NULL,
 	next_storage_id INTEGER NOT NULL,
 	next_order_id INTEGER NOT NULL,
 	next_level_id INTEGER NOT NULL,
-	allow_worker_reassignment_during_shift INTEGER NOT NULL,
 	order_allocation_mode TEXT NOT NULL
 );
 

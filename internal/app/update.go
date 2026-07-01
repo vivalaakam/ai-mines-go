@@ -32,16 +32,6 @@ func (g *Game) Update() error {
 		}
 	}
 
-	phaseData, err := g.engine.Read("get_game_phase", nil)
-	if err != nil {
-		return err
-	}
-
-	if phaseData["phase"] != "shift_running" {
-		g.accumulator.Reset()
-		return nil
-	}
-
 	if !g.accumulator.Advance() {
 		return nil
 	}
@@ -55,12 +45,18 @@ func (g *Game) Update() error {
 		return nil
 	}
 	g.handleLuaEvents(result.Events)
+
+	g.ticksSinceSave++
+	if g.ticksSinceSave >= AutosaveIntervalTicks {
+		g.ticksSinceSave = 0
+		g.autosave("periodic")
+	}
 	return nil
 }
 
 // hireWorker buys the cheapest currently-purchasable worker level (the same
 // level/cost the HUD button shows - see render.HireWorkerButton), letting Lua's
-// buy_worker validate phase/funds/level rather than duplicating that logic here.
+// buy_worker validate funds/level rather than duplicating that logic here.
 func (g *Game) hireWorker() error {
 	workers, err := g.engine.Read("get_workers", nil)
 	if err != nil {
@@ -90,8 +86,6 @@ func (g *Game) handleLuaEvents(events []any) {
 		switch event["type"] {
 		case "autosave_requested":
 			g.autosave(event["reason"])
-		case "shift_completed":
-			log.Printf("shift completed: shiftIndex=%v", event["shiftIndex"])
 		case "order_completed":
 			log.Printf("order completed: orderId=%v", event["orderId"])
 		}
@@ -110,8 +104,7 @@ func (g *Game) autosave(reason any) {
 	log.Printf("autosave completed: reason=%v", reason)
 }
 
-// SaveNow performs a manual save, e.g. bound to a UI command or hotkey
-// (REQUIREMENTS.md §30: "Manual save is also allowed from planning phase").
+// SaveNow performs a manual save, e.g. bound to a UI command or hotkey.
 func (g *Game) SaveNow() error {
 	if g.store == nil || g.saveID == "" {
 		return nil

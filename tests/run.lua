@@ -188,8 +188,6 @@ test("worker mines a deposit: rock never enters storage, resource does, cell bec
   })
   assert(assign.ok, "assign failed: " .. (assign.error and assign.error.message or ""))
 
-  assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
-
   local depleted = false
   for i = 1, 250 do
     local tr = engine.apply({ type = "tick", ticksPassed = 1 })
@@ -262,7 +260,6 @@ test("a full storage blocks only that resource without losing it", function()
     }).ok,
     "assign failed"
   )
-  assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
 
   local sawBlocked = false
   for i = 1, 250 do
@@ -324,18 +321,14 @@ test("only one worker may occupy a given position cell", function()
   assert_eq(a2.error.code, "position_occupied", "expected position_occupied")
 end)
 
-test("shift lasts exactly 300 ticks and fast_forward stops at planning phase", function()
-  engine.new_game("shift-length-seed")
-  assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
-  local ff = engine.apply({ type = "fast_forward_to_shift_end" })
-  assert(ff.ok, "fast_forward_to_shift_end failed")
-  assert_eq(ff.processedTicks, 300, "processed ticks for a full shift")
-  local phase = engine.read({ type = "get_game_phase" }).data.phase
-  assert_eq(phase, "shift_planning", "phase after fast-forwarding a full shift")
-
-  local ffAgain = engine.apply({ type = "fast_forward_to_shift_end" })
-  assert(not ffAgain.ok, "fast_forward should fail outside shift_running")
-  assert_eq(ffAgain.error.code, "not_shift_running", "fast_forward error code outside shift")
+test("tick advances gameTime.tick by exactly ticksPassed, with no phase gating", function()
+  engine.new_game("tick-advance-seed")
+  local before = engine.read({ type = "get_game_time" }).data.tick
+  local tr = engine.apply({ type = "tick", ticksPassed = 5 })
+  assert(tr.ok, "tick failed")
+  assert_eq(tr.processedTicks, 5, "processed ticks")
+  local after = engine.read({ type = "get_game_time" }).data.tick
+  assert_eq(after, before + 5, "tick count after advancing")
 end)
 
 test("worker purchase respects highestUnlockedWorkerLevel - 2 formula", function()
@@ -393,20 +386,6 @@ test("orders: available order can be declined, and accepting with enough stock c
   assert_eq(accept.data.state, "completed", "order with enough stock should complete immediately on accept")
 end)
 
-test("autosave_requested event fires exactly when a shift completes", function()
-  engine.new_game("autosave-event-seed")
-  assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
-  local ff = engine.apply({ type = "fast_forward_to_shift_end" })
-  assert(ff.ok, "fast_forward_to_shift_end failed")
-  local sawAutosave = false
-  for _, e in ipairs(ff.events) do
-    if e.type == "autosave_requested" and e.reason == "shift_completed" then
-      sawAutosave = true
-    end
-  end
-  assert(sawAutosave, "expected an autosave_requested event when the shift completed")
-end)
-
 test("merge combines two idle same-level workers into one worker of the next level", function()
   engine.new_game("merge-seed")
   local b1 = engine.apply({ type = "buy_worker", workerLevel = 1 })
@@ -426,14 +405,13 @@ test("create_next_level is rejected until the stairs area is reachable", functio
   assert_eq(bad.error.code, "stairs_not_reachable", "create_next_level error code")
 end)
 
-test("export_state / load_state round-trip preserves phase and money", function()
+test("export_state / load_state round-trip preserves money and worker count", function()
   engine.new_game("roundtrip-seed")
   engine.apply({ type = "buy_worker", workerLevel = 1 })
   local before = engine.read({ type = "get_player_summary" }).data
   local exported = engine.export_state()
   engine.load_state(exported)
   local after = engine.read({ type = "get_player_summary" }).data
-  assert_eq(after.phase, before.phase, "phase after round-trip")
   assert_eq(after.money, before.money, "money after round-trip")
   assert_eq(after.workerCount, before.workerCount, "worker count after round-trip")
 end)

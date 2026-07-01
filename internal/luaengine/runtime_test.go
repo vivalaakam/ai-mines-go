@@ -13,14 +13,6 @@ func TestEngineLifecycle(t *testing.T) {
 		t.Fatalf("NewGame() error: %v", err)
 	}
 
-	phase, err := e.Read("get_game_phase", nil)
-	if err != nil {
-		t.Fatalf("Read(get_game_phase) error: %v", err)
-	}
-	if phase["phase"] != "shift_planning" {
-		t.Fatalf("expected initial phase shift_planning, got %v", phase["phase"])
-	}
-
 	buyResult, err := e.Apply("buy_worker", map[string]any{"workerLevel": float64(1)})
 	if err != nil {
 		t.Fatalf("Apply(buy_worker) error: %v", err)
@@ -29,20 +21,21 @@ func TestEngineLifecycle(t *testing.T) {
 		t.Fatalf("buy_worker failed: %+v", buyResult.Error)
 	}
 
-	startResult, err := e.Apply("start_next_shift", nil)
+	tickResult, err := e.Apply("tick", map[string]any{"ticksPassed": float64(1)})
 	if err != nil {
-		t.Fatalf("Apply(start_next_shift) error: %v", err)
+		t.Fatalf("Apply(tick) error: %v", err)
 	}
-	if !startResult.OK {
-		t.Fatalf("start_next_shift failed: %+v", startResult.Error)
+	if !tickResult.OK {
+		t.Fatalf("tick failed: %+v", tickResult.Error)
 	}
 
-	badFF, err := e.Apply("buy_worker", map[string]any{"workerLevel": float64(1)})
+	// Purchases are no longer phase-gated; a second buy_worker must still succeed.
+	buyResult2, err := e.Apply("buy_worker", map[string]any{"workerLevel": float64(1)})
 	if err != nil {
-		t.Fatalf("Apply(buy_worker during shift) error: %v", err)
+		t.Fatalf("Apply(buy_worker) error: %v", err)
 	}
-	if badFF.OK || badFF.Error == nil || badFF.Error.Code != "not_in_planning" {
-		t.Fatalf("expected not_in_planning error, got %+v", badFF)
+	if !buyResult2.OK {
+		t.Fatalf("second buy_worker failed: %+v", buyResult2.Error)
 	}
 
 	exported, err := e.ExportState()
@@ -56,12 +49,12 @@ func TestEngineLifecycle(t *testing.T) {
 	if err := e.LoadState(exported); err != nil {
 		t.Fatalf("LoadState() error: %v", err)
 	}
-	phaseAfterReload, err := e.Read("get_game_phase", nil)
+	timeAfterReload, err := e.Read("get_game_time", nil)
 	if err != nil {
 		t.Fatalf("Read after reload error: %v", err)
 	}
-	if phaseAfterReload["phase"] != "shift_running" {
-		t.Fatalf("expected shift_running phase preserved after reload, got %v", phaseAfterReload["phase"])
+	if timeAfterReload["tick"] != float64(1) {
+		t.Fatalf("expected tick=1 preserved after reload, got %v", timeAfterReload["tick"])
 	}
 }
 

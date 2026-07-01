@@ -31,7 +31,7 @@ func TestAutosaveEventTriggersPersistenceAdapter(t *testing.T) {
 
 	game := NewGame(engine, store, "save-1", "level_1")
 	game.handleLuaEvents([]any{
-		map[string]any{"type": "autosave_requested", "reason": "shift_completed"},
+		map[string]any{"type": "autosave_requested", "reason": "periodic"},
 	})
 
 	loaded, err := store.LoadEngine("save-1")

@@ -10,17 +10,22 @@ import (
 // (REQUIREMENTS.md §6), so this is also updatesPerGameTick for the accumulator.
 const TicksPerSecond = 60
 
+// AutosaveIntervalTicks controls how often the game autosaves now that there
+// are no more shift boundaries to trigger it.
+const AutosaveIntervalTicks = 60
+
 // Game is the Ebitengine entry point. It holds no gameplay state of its own -
 // everything authoritative is fetched from the Lua engine via apply/read on
 // demand (REQUIREMENTS.md: "Go must not mutate authoritative state directly").
 type Game struct {
-	engine      *luaengine.Engine
-	store       *persistence.Adapter
-	saveID      string
-	camera      *Camera
-	accumulator *TickAccumulator
-	levelID     string
-	mapBounds   *MapBounds
+	engine         *luaengine.Engine
+	store          *persistence.Adapter
+	saveID         string
+	camera         *Camera
+	accumulator    *TickAccumulator
+	levelID        string
+	mapBounds      *MapBounds
+	ticksSinceSave int
 }
 
 // MapBounds is the known-generated extent of the current level, in world

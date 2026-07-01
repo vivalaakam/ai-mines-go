@@ -127,7 +127,7 @@ function M.accept_order(state, orderId)
 
   order.state = "accepted"
   order.acceptedAtTick = state.gameTime.tick
-  deliver_available(state, order) -- deliver whatever is available now; rest at shift end
+  deliver_available(state, order) -- deliver whatever is available now; rest via settle() on later ticks
   M.replenish(state)
   return order, nil
 end
@@ -174,10 +174,10 @@ function M.complete_order_immediately(state, orderId)
   return order, nil
 end
 
---- Runs at shift end: allocates available resources to accepted orders per
+--- Runs every tick: allocates available resources to accepted orders per
 --- rulesConfig.orderAllocationMode, expires overdue available orders, and
 --- completes orders whose requirements are now fully met.
-function M.process_shift_end(state)
+function M.settle(state)
   local events = {}
 
   for _, order in pairs(state.orders) do

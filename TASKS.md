@@ -16,14 +16,12 @@
 - [x] `engine.apply(command)` / `engine.read(query)` / `engine.export_state()` / `engine.load_state(state)` (§33)
 - [x] Формат результата `apply`: `{ok, events, patch}` / `{ok=false, error={code, message, details}}` (§38)
 - [x] Диспетчер команд/запросов по `type`, валидация в Lua, без host-функций с игровой логикой (§5)
-- [x] `rulesConfig` (в т.ч. `allowWorkerReassignmentDuringShift`) как конфиг, а не хардкод (§7, §22)
+- [x] `rulesConfig` как конфиг, а не хардкод (§7, §22)
 
-## Фаза 2 — Время и фазы игры
+## Фаза 2 — Время
 
-- [x] Модель тика (1 тик = 1 сек), команда `tick` с ограничением одной сменой за вызов, возврат `processedTicks`/`remainingTicks` (§6)
-- [x] `fast_forward_to_shift_end`, `start_next_shift`
-- [x] Фазы `shift_running` / `shift_planning`, блокировка purchase/merge/order-команд вне planning (§7)
-- [x] Событие `shift_completed` → `autosave_requested` → `shift_planning_started`
+- [x] Модель тика (1 тик = 1 сек), команда `tick` продвигает `state.gameTime.tick` на `ticksPassed` без ограничения по сменам (§6)
+- [x] Покупки/merge/order-команды разрешены в любой момент, без фазовой блокировки (§7)
 
 ## Фаза 3 — Генерация карты
 
@@ -81,7 +79,7 @@
 
 ## Фаза 11 — Запросы (read-only)
 
-- [x] `get_game_phase`, `get_game_time`, `get_level_view` (viewport-based view-model), `get_workers`, `get_storage_state`, `get_available_orders`, `get_active_orders`, `get_resources`, `get_player_summary`, `get_shift_summary` (§37)
+- [x] `get_game_time`, `get_level_view` (viewport-based view-model), `get_workers`, `get_storage_state`, `get_available_orders`, `get_active_orders`, `get_resources`, `get_player_summary` (§37)
 
 ## Фаза 12 — Go: Lua runtime и биндинги
 

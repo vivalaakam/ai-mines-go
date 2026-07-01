@@ -1,4 +1,3 @@
-local shiftsMod = require("simulation.shifts")
 local storageMod = require("simulation.storage")
 local resourceConfig = require("config.resources")
 local balance = require("config.balance")
@@ -11,15 +10,9 @@ end
 
 local handlers = {}
 
-handlers["get_game_phase"] = function(state)
-  return { phase = state.phase }
-end
-
 handlers["get_game_time"] = function(state)
   return {
     tick = state.gameTime.tick,
-    shiftIndex = state.gameTime.shiftIndex,
-    ticksIntoShift = state.gameTime.tick % shiftsMod.SHIFT_LENGTH,
   }
 end
 
@@ -143,21 +136,9 @@ handlers["get_player_summary"] = function(state)
   end
   return {
     money = state.money,
-    phase = state.phase,
     highestUnlockedWorkerLevel = state.highestUnlockedWorkerLevel,
     workerCount = workerCount,
-    gameTime = { tick = state.gameTime.tick, shiftIndex = state.gameTime.shiftIndex },
-  }
-end
-
-handlers["get_shift_summary"] = function(state)
-  local ticksIntoShift = state.gameTime.tick % shiftsMod.SHIFT_LENGTH
-  return {
-    shiftIndex = state.gameTime.shiftIndex,
-    phase = state.phase,
-    ticksIntoShift = ticksIntoShift,
-    ticksRemainingInShift = shiftsMod.SHIFT_LENGTH - ticksIntoShift,
-    shiftLength = shiftsMod.SHIFT_LENGTH,
+    gameTime = { tick = state.gameTime.tick },
   }
 end
 

@@ -98,7 +98,7 @@ func TestSaveEngineOverwritesPreviousSave(t *testing.T) {
 	}
 }
 
-func TestLoadEngineAfterShiftPreservesWorkerAssignment(t *testing.T) {
+func TestLoadEngineAfterSavePreservesWorkerAssignment(t *testing.T) {
 	a := openTestAdapter(t)
 
 	engine, err := a.CreateNewEngine("save-1", "assign-seed")
@@ -155,12 +155,9 @@ func TestLoadEngineAfterShiftPreservesWorkerAssignment(t *testing.T) {
 		t.Fatalf("expected reloaded worker targetCellId=%s, got %v", targetCellID, w["targetCellId"])
 	}
 
-	// Reloaded engine must still be able to progress the mining job: start a
-	// shift and tick once without error, proving activeMiningCells/assignedWorkers
-	// were reconstructed, not just the worker's own fields.
-	if _, err := loaded.Apply("start_next_shift", nil); err != nil {
-		t.Fatalf("start_next_shift error: %v", err)
-	}
+	// Reloaded engine must still be able to progress the mining job: tick once
+	// without error, proving activeMiningCells/assignedWorkers were
+	// reconstructed, not just the worker's own fields.
 	tickResult, err := loaded.Apply("tick", map[string]any{"ticksPassed": float64(1)})
 	if err != nil {
 		t.Fatalf("tick error: %v", err)

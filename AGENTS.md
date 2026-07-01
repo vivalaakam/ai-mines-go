@@ -13,7 +13,7 @@ The project is intentionally split into separate layers. Code agents must preser
 
 The most important rule:
 
-> All gameplay mechanics, state mutations, simulation rules, validation, economy, generation, workers, orders, storage, visibility, reachability, shifts, and tick processing must live in Lua.
+> All gameplay mechanics, state mutations, simulation rules, validation, economy, generation, workers, orders, storage, visibility, reachability, and tick processing must live in Lua.
 
 Go and Ebitengine are infrastructure and presentation layers. They must not become the source of gameplay rules.
 
@@ -62,7 +62,6 @@ This includes:
 - updating visibility;
 - updating reachability;
 - opening empty cave areas;
-- processing shift completion;
 - requesting autosave.
 
 Go code must not mutate the authoritative game state directly.
@@ -123,8 +122,7 @@ Forbidden responsibilities:
 - deciding if a cell is complete;
 - deciding if a level is unlocked;
 - applying economy rules;
-- applying merge rules;
-- applying shift rules.
+- applying merge rules.
 
 If the logic answers “what should happen according to the game rules?”, it belongs in Lua.
 
@@ -140,7 +138,6 @@ Allowed responsibilities:
 - draw reachable/scouted/unknown states;
 - draw storage UI;
 - draw order UI;
-- draw shift planning UI;
 - draw buttons;
 - draw animations;
 - keep local hover/selection/camera state.
@@ -169,7 +166,6 @@ Lua must contain:
 - command validation;
 - query handling;
 - tick processing;
-- shift processing;
 - mining calculation;
 - worker logic;
 - merge logic;
@@ -241,8 +237,6 @@ The save must include:
 - generator version;
 - schema version;
 - current tick;
-- current shift;
-- current game phase;
 - money;
 - unlocked levels;
 - unlocked resources;
@@ -267,7 +261,6 @@ The following mechanics must be implemented in Lua only.
 ### Time
 
 - 1 game tick = 1 second.
-- 1 shift = 300 ticks.
 - Offline progress is not required for MVP.
 - Game time advances only via:
 
@@ -278,60 +271,14 @@ engine.apply({
 })
 ```
 
-or:
+Time is continuous: there is no shift boundary, no phase gating, and no
+`remainingTicks` clamping. A single `tick` command simply advances
+`state.gameTime.tick` by `ticksPassed` and runs mining/order-settlement logic
+for each elapsed tick.
 
-```lua
-engine.apply({
-  type = "fast_forward_to_shift_end"
-})
-```
-
-One `tick` call must not cross more than one shift boundary.
-
-If a command receives more ticks than remain in the current shift, Lua must process only until shift end and return `remainingTicks`.
-
----
-
-### Game Phases
-
-Lua owns the game phase.
-
-Required phases:
-
-```lua
-"shift_running"
-"shift_planning"
-```
-
-After a shift ends, Lua must enter `shift_planning`.
-
-The next shift starts only by explicit command:
-
-```lua
-engine.apply({
-  type = "start_next_shift"
-})
-```
-
-Purchases, merge, storage upgrades, order selection, order priority changes, and worker planning are available in `shift_planning`.
-
-Whether worker reassignment during `shift_running` is allowed is still an open design decision and must be controlled by config:
-
-```lua
-rulesConfig = {
-  allowWorkerReassignmentDuringShift = true
-}
-```
-
-or:
-
-```lua
-rulesConfig = {
-  allowWorkerReassignmentDuringShift = false
-}
-```
-
-Do not hard-code this behavior in Go.
+Purchases, merge, storage upgrades, order selection, order priority changes,
+and worker (re)assignment are valid at any time — there is no planning phase
+that gates them.
 
 ---
 
@@ -474,7 +421,7 @@ Purchasable worker level:
 maxPurchasableWorkerLevel = math.max(1, highestUnlockedWorkerLevel - 2)
 ```
 
-Worker purchase and merge are planning-phase actions.
+Worker purchase and merge are allowed at any time.
 
 ---
 
@@ -488,7 +435,7 @@ There may be multiple storages for the same resource.
 
 Capacities for the same resource are summed.
 
-Storage can be bought and upgraded during planning.
+Storage can be bought and upgraded at any time.
 
 If a resource has no free capacity, that resource is not mined.
 
@@ -514,7 +461,7 @@ If the player starts an order, it cannot be cancelled.
 
 If all required resources are available, an order can complete immediately.
 
-If not, the order can be accepted and filled at shift end.
+If not, the order can be accepted and filled as the required resources become available on later ticks.
 
 When multiple active orders require the same resource, the engine must support allocation mode:
 
@@ -529,7 +476,7 @@ For MVP, prefer:
 "priority_based"
 ```
 
-Order selection and priority changes are planning-phase actions.
+Order selection and priority changes are allowed at any time.
 
 ---
 
@@ -557,8 +504,6 @@ Minimum required command types:
 ```lua
 -- time
 { type = "tick", ticksPassed = 1 }
-{ type = "fast_forward_to_shift_end" }
-{ type = "start_next_shift" }
 
 -- workers
 { type = "buy_worker", workerLevel = 1 }
@@ -589,7 +534,6 @@ All validation is performed in Lua.
 Minimum required query types:
 
 ```lua
-{ type = "get_game_phase" }
 { type = "get_game_time" }
 { type = "get_level_view", levelId = "...", viewport = { x = 0, y = 0, width = 40, height = 30 } }
 { type = "get_workers" }
@@ -598,7 +542,6 @@ Minimum required query types:
 { type = "get_active_orders" }
 { type = "get_resources" }
 { type = "get_player_summary" }
-{ type = "get_shift_summary" }
 ```
 
 Queries must not mutate state.
@@ -648,21 +591,19 @@ Pseudo-flow:
 func (g *Game) Update() error {
     g.handleInput()
 
-    if g.IsShiftRunning() {
-        g.updateAccumulator++
+    g.updateAccumulator++
 
-        if g.updateAccumulator >= g.updatesPerGameTick {
-            g.updateAccumulator = 0
+    if g.updateAccumulator >= g.updatesPerGameTick {
+        g.updateAccumulator = 0
 
-            result := g.luaEngine.Apply(Command{
-                Type: "tick",
-                Payload: map[string]any{
-                    "ticksPassed": 1,
-                },
-            })
+        result := g.luaEngine.Apply(Command{
+            Type: "tick",
+            Payload: map[string]any{
+                "ticksPassed": 1,
+            },
+        })
 
-            g.handleLuaEvents(result.Events)
-        }
+        g.handleLuaEvents(result.Events)
     }
 
     return nil
@@ -679,18 +620,12 @@ Go must not mutate authoritative state in `Draw`.
 
 Lua does not write to SQLite.
 
-After shift completion, Lua returns:
+Lua no longer emits autosave-related events. Instead, the Go app layer
+(`internal/app/update.go`) tracks a periodic tick counter and triggers
+autosave itself every `AutosaveIntervalTicks` ticks (see
+`internal/app/game.go`), independent of anything Lua returns.
 
-```lua
-{
-  type = "autosave_requested",
-  reason = "shift_completed"
-}
-```
-
-Go application layer must handle this event and call the persistence adapter.
-
-Manual save is also allowed from planning phase or UI command.
+Manual save is also allowed via UI command at any time.
 
 ---
 
@@ -737,11 +672,8 @@ Required coverage:
 - worker movement requires reachability;
 - worker merge is 2-to-1;
 - worker purchase level follows `highestUnlockedWorkerLevel - 2`;
-- shift lasts 300 ticks;
-- `fast_forward_to_shift_end` stops at planning phase;
 - order completion works;
-- order allocation works;
-- autosave event is emitted at shift end.
+- order allocation works.
 
 ### Go Integration Tests
 
@@ -751,7 +683,7 @@ Required coverage:
 - Go can call `apply`;
 - Go can call `read`;
 - Lua errors map to structured Go errors;
-- autosave event triggers persistence adapter;
+- Go app layer's periodic autosave counter triggers the persistence adapter;
 - SQLite adapter saves structured state;
 - SQLite adapter loads structured state;
 - loaded state creates an equivalent Lua engine;
@@ -853,13 +785,11 @@ Agents must not:
 
 The following decisions are intentionally unresolved:
 
-1. Whether worker reassignment is allowed during `shift_running`.
-2. Whether active shifts are fully locked-in or allow emergency intervention.
-3. Exact worker speed formula.
-4. Exact resource amount formula.
-5. Exact order reward formula.
-6. Exact worker purchase cost formula.
-7. Exact storage upgrade cost formula.
+1. Exact worker speed formula.
+2. Exact resource amount formula.
+3. Exact order reward formula.
+4. Exact worker purchase cost formula.
+5. Exact storage upgrade cost formula.
 8. Exact cave-size limits.
 9. Exact Lua VM library for Go.
 10. Exact SQLite migration framework.

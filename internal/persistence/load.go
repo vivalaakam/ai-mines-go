@@ -6,21 +6,20 @@ import "fmt"
 // shape lua/state.lua expects from engine.load_state.
 func (a *Adapter) loadState(saveID string) (map[string]any, error) {
 	row := a.db.QueryRow(`
-		SELECT seed_phrase, generator_version, schema_version, tick, shift_index, phase, money,
+		SELECT seed_phrase, generator_version, schema_version, tick, money,
 			highest_unlocked_worker_level, next_worker_id, next_storage_id, next_order_id, next_level_id,
-			allow_worker_reassignment_during_shift, order_allocation_mode
+			order_allocation_mode
 		FROM saves WHERE id = ?`, saveID)
 
 	var (
-		seedPhrase, phase, orderAllocationMode                                   string
-		generatorVersion, schemaVersion, tick, shiftIndex, highestUnlockedWorker int
-		nextWorker, nextStorage, nextOrder, nextLevel                            int
-		money                                                                    float64
-		allowReassignment                                                        bool
+		seedPhrase, orderAllocationMode                              string
+		generatorVersion, schemaVersion, tick, highestUnlockedWorker int
+		nextWorker, nextStorage, nextOrder, nextLevel                int
+		money                                                        float64
 	)
-	if err := row.Scan(&seedPhrase, &generatorVersion, &schemaVersion, &tick, &shiftIndex, &phase, &money,
+	if err := row.Scan(&seedPhrase, &generatorVersion, &schemaVersion, &tick, &money,
 		&highestUnlockedWorker, &nextWorker, &nextStorage, &nextOrder, &nextLevel,
-		&allowReassignment, &orderAllocationMode); err != nil {
+		&orderAllocationMode); err != nil {
 		return nil, fmt.Errorf("loading save %s: %w", saveID, err)
 	}
 
@@ -28,13 +27,11 @@ func (a *Adapter) loadState(saveID string) (map[string]any, error) {
 		"schemaVersion":              float64(schemaVersion),
 		"generatorVersion":           float64(generatorVersion),
 		"seedPhrase":                 seedPhrase,
-		"gameTime":                   map[string]any{"tick": float64(tick), "shiftIndex": float64(shiftIndex)},
-		"phase":                      phase,
+		"gameTime":                   map[string]any{"tick": float64(tick)},
 		"money":                      money,
 		"highestUnlockedWorkerLevel": float64(highestUnlockedWorker),
 		"rulesConfig": map[string]any{
-			"allowWorkerReassignmentDuringShift": allowReassignment,
-			"orderAllocationMode":                orderAllocationMode,
+			"orderAllocationMode": orderAllocationMode,
 		},
 		"nextIds": map[string]any{
 			"worker":  float64(nextWorker),

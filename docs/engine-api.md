@@ -12,7 +12,7 @@ engine.load_state(state)     -- restores an engine from a snapshot
 
 ## Commands (`apply`)
 
-`tick`, `fast_forward_to_shift_end`, `start_next_shift`, `buy_worker`, `merge_workers`,
+`tick`, `buy_worker`, `merge_workers`,
 `assign_worker_to_target_cell`, `stop_worker`, `buy_storage`, `upgrade_storage`,
 `accept_order`, `decline_order`, `set_order_priority`, `complete_order_immediately`,
 `create_next_level`.
@@ -22,9 +22,9 @@ See `lua/apply.lua` for the exact payload shape of each command and `REQUIREMENT
 
 ## Queries (`read`)
 
-`get_game_phase`, `get_game_time`, `get_level_view`, `get_workers`, `get_storage_state`,
-`get_available_orders`, `get_active_orders`, `get_resources`, `get_player_summary`,
-`get_shift_summary`. See `lua/read.lua`.
+`get_game_time`, `get_level_view`, `get_workers`, `get_storage_state`,
+`get_available_orders`, `get_active_orders`, `get_resources`, `get_player_summary`.
+See `lua/read.lua`.
 
 ## Error codes
 

@@ -44,12 +44,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 
-	shiftSummary, err := g.engine.Read("get_shift_summary", nil)
-	if err != nil {
-		log.Printf("get_shift_summary failed: %v", err)
-		return
-	}
-
 	workers, err := g.engine.Read("get_workers", nil)
 	if err != nil {
 		log.Printf("get_workers failed: %v", err)
@@ -66,7 +60,6 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		Camera:        render.Camera{X: g.camera.X, Y: g.camera.Y, Zoom: g.camera.Zoom},
 		LevelView:     levelView,
 		PlayerSummary: playerSummary,
-		ShiftSummary:  shiftSummary,
 		Workers:       workers,
 		Resources:     resources,
 	})
