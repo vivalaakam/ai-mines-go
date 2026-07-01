@@ -12,6 +12,11 @@ func (g *Game) Update() error {
 	if input.ZoomDelta != 0 {
 		g.camera.SetZoom(g.camera.Zoom + input.ZoomDelta)
 	}
+	if input.HireWorkerClicked {
+		if err := g.hireWorker(); err != nil {
+			return err
+		}
+	}
 
 	phaseData, err := g.engine.Read("get_game_phase", nil)
 	if err != nil {
@@ -36,6 +41,26 @@ func (g *Game) Update() error {
 		return nil
 	}
 	g.handleLuaEvents(result.Events)
+	return nil
+}
+
+// hireWorker buys the cheapest currently-purchasable worker level (the same
+// level/cost the HUD button shows - see render.HireWorkerButton), letting Lua's
+// buy_worker validate phase/funds/level rather than duplicating that logic here.
+func (g *Game) hireWorker() error {
+	workers, err := g.engine.Read("get_workers", nil)
+	if err != nil {
+		return err
+	}
+	level, _ := workers["nextPurchasableWorkerLevel"].(float64)
+
+	result, err := g.engine.Apply("buy_worker", map[string]any{"workerLevel": level})
+	if err != nil {
+		return err
+	}
+	if !result.OK {
+		log.Printf("buy_worker rejected: %+v", result.Error)
+	}
 	return nil
 }
 

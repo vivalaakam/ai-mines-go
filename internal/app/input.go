@@ -1,12 +1,20 @@
 package app
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"image"
+
+	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/vivalaakam/ai-mines-go/internal/render"
+)
 
 // InputState is a snapshot of this frame's raw input, decoupled from ebiten so
 // Update() logic could be tested without a graphics context if needed later.
 type InputState struct {
 	CameraDX, CameraDY float64
 	ZoomDelta          float64
+	HireWorkerClicked  bool
 }
 
 const cameraPanSpeed = 6.0
@@ -27,5 +35,11 @@ func PollInput() InputState {
 	}
 	_, wheelY := ebiten.Wheel()
 	s.ZoomDelta = wheelY * 0.1
+
+	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+		x, y := ebiten.CursorPosition()
+		s.HireWorkerClicked = image.Pt(x, y).In(render.HireWorkerButton)
+	}
+
 	return s
 }

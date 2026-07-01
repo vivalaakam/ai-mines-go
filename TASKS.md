@@ -120,6 +120,12 @@
 - [x] Обновить `docs/*.md` при изменении архитектуры (`docs/architecture.md`, `docs/persistence.md`)
 - [x] Commit только при прохождении всех проверок — создан по запросу пользователя после того, как все проверки прошли (`f039fae`)
 
+## Фаза 18 — UI-доработки по фидбеку
+
+- [x] Кнопка найма работника в HUD (`render.HireWorkerButton`), клик обрабатывается в `internal/app` (`hireWorker()`), цена/уровень берутся из Lua (`get_workers.nextPurchasableWorkerLevel/nextPurchaseCost`, посчитано через `config/balance.lua`) — Go не дублирует формулу стоимости
+- [x] Запуск игры в полноэкранном режиме (`ebiten.SetFullscreen(true)` в `cmd/mining-game/main.go`)
+- [x] Go-тест `TestHireWorkerBuysNextPurchasableLevel`, визуально проверено скриншотом запущенного приложения
+
 ## Открытые решения (не блокируют разработку, но требуют явного флага/конфига)
 
 - Переназначение работников во время активной смены

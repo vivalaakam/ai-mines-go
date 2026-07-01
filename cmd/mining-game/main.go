@@ -46,6 +46,7 @@ func main() {
 
 	ebiten.SetWindowSize(1280, 720)
 	ebiten.SetWindowTitle("Idle Mining Game")
+	ebiten.SetFullscreen(true)
 	if err := ebiten.RunGame(game); err != nil {
 		log.Fatal(err)
 	}

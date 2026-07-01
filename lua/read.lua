@@ -1,6 +1,7 @@
 local shiftsMod = require("simulation.shifts")
 local storageMod = require("simulation.storage")
 local resourceConfig = require("config.resources")
+local balance = require("config.balance")
 
 local M = {}
 
@@ -81,7 +82,13 @@ handlers["get_workers"] = function(state)
   for _, worker in pairs(state.workers) do
     list[#list + 1] = worker
   end
-  return { workers = list, highestUnlockedWorkerLevel = state.highestUnlockedWorkerLevel }
+  local nextLevel = balance.max_purchasable_worker_level(state.highestUnlockedWorkerLevel)
+  return {
+    workers = list,
+    highestUnlockedWorkerLevel = state.highestUnlockedWorkerLevel,
+    nextPurchasableWorkerLevel = nextLevel,
+    nextPurchaseCost = balance.worker_purchase_cost(nextLevel),
+  }
 end
 
 handlers["get_storage_state"] = function(state)

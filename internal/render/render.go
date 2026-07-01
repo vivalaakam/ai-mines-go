@@ -26,6 +26,7 @@ type ViewModel struct {
 	LevelView     map[string]any
 	PlayerSummary map[string]any
 	ShiftSummary  map[string]any
+	Workers       map[string]any
 }
 
 func Draw(screen *ebiten.Image, vm ViewModel) {
