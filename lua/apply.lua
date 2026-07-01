@@ -42,9 +42,41 @@ handlers["buy_worker"] = function(state, cmd)
   return ok({ data = worker })
 end
 
+-- Merging is usually triggered by dragging one worker onto another, and
+-- dragged workers are commonly still busy mining - stop each one first (idle
+-- is a merge precondition) and, if the merge itself is then rejected (e.g.
+-- mismatched levels), resend each worker back to whatever it was doing
+-- before the drag interrupted it, instead of leaving it stranded idle.
 handlers["merge_workers"] = function(state, cmd)
-  local worker, err = workersMod.merge_workers(state, cmd.workerIds)
+  local workerIds = cmd.workerIds or {}
+  local previousAssignments = {}
+  for _, workerId in ipairs(workerIds) do
+    local worker = state.workers[workerId]
+    if worker and worker.state ~= "idle" then
+      previousAssignments[workerId] = {
+        levelId = worker.assignedLevelId,
+        targetCellId = worker.targetCellId,
+        positionCellId = worker.positionCellId,
+        assignmentMode = worker.assignmentMode,
+      }
+      workersMod.stop_worker(state, workerId)
+    end
+  end
+
+  local worker, err = workersMod.merge_workers(state, workerIds)
   if err then
+    for workerId, prev in pairs(previousAssignments) do
+      if prev.levelId and prev.targetCellId and prev.positionCellId then
+        workersMod.assign_worker(
+          state,
+          workerId,
+          prev.levelId,
+          prev.targetCellId,
+          prev.positionCellId,
+          prev.assignmentMode
+        )
+      end
+    end
     return fail(err)
   end
   return ok({ data = worker })
