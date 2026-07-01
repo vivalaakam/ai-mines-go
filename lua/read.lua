@@ -74,6 +74,7 @@ handlers["get_level_view"] = function(state, query)
     nextLevelId = level.nextLevelId,
     cells = cellsOut,
     workers = workersOut,
+    bounds = level.bounds,
   }
 end
 

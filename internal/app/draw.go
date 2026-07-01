@@ -15,19 +15,27 @@ import (
 func (g *Game) Draw(screen *ebiten.Image) {
 	viewportX := math.Floor(g.camera.X / render.TileSize)
 	viewportY := math.Floor(g.camera.Y / render.TileSize)
+	cellsWide, cellsTall := render.ViewportCellCounts(g.camera.Zoom)
 
 	levelView, err := g.engine.Read("get_level_view", map[string]any{
 		"levelId": g.levelID,
 		"viewport": map[string]any{
 			"x":      viewportX,
 			"y":      viewportY,
-			"width":  float64(render.ViewportCellsWide),
-			"height": float64(render.ViewportCellsTall),
+			"width":  float64(cellsWide),
+			"height": float64(cellsTall),
 		},
 	})
 	if err != nil {
 		log.Printf("get_level_view failed: %v", err)
 		return
+	}
+	if bounds, ok := levelView["bounds"].(map[string]any); ok {
+		minX, _ := bounds["minX"].(float64)
+		minY, _ := bounds["minY"].(float64)
+		maxX, _ := bounds["maxX"].(float64)
+		maxY, _ := bounds["maxY"].(float64)
+		g.mapBounds = &MapBounds{MinX: minX, MinY: minY, MaxX: maxX, MaxY: maxY}
 	}
 
 	playerSummary, err := g.engine.Read("get_player_summary", nil)
@@ -48,11 +56,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 
+	resources, err := g.engine.Read("get_resources", nil)
+	if err != nil {
+		log.Printf("get_resources failed: %v", err)
+		return
+	}
+
 	render.Draw(screen, render.ViewModel{
 		Camera:        render.Camera{X: g.camera.X, Y: g.camera.Y, Zoom: g.camera.Zoom},
 		LevelView:     levelView,
 		PlayerSummary: playerSummary,
 		ShiftSummary:  shiftSummary,
 		Workers:       workers,
+		Resources:     resources,
 	})
 }

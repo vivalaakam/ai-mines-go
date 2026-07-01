@@ -180,4 +180,54 @@ function M.buy_worker(state, workerLevel)
   return worker, nil
 end
 
+-- Places a freshly hired/merged idle worker on the map: if a reachable
+-- mineable deposit is adjacent to an open cell, put the worker there and
+-- start mining it immediately; otherwise just stand them at the entrance.
+function M.deploy_worker(state, worker, levelId)
+  local level = state.levels[levelId]
+  local start = level and level.entranceCell
+  if not level or not start or worker.state ~= "idle" then
+    return
+  end
+
+  local neighborOffsets = { { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } }
+  local visited = { [start.x .. "," .. start.y] = true }
+  local queue = { { x = start.x, y = start.y } }
+
+  while #queue > 0 do
+    local pos = table.remove(queue, 1)
+    local key = pos.x .. "," .. pos.y
+    local cell = level.cells[key]
+    if cell and cellsMod.is_passable(cell) and cell.accessibility == "reachable" then
+      if not cell.occupiedBy then
+        for _, off in ipairs(neighborOffsets) do
+          local nkey = (pos.x + off[1]) .. "," .. (pos.y + off[2])
+          local target = level.cells[nkey]
+          if target and target.kind == "deposit" and not cellsMod.is_depleted(target) then
+            local _, assignErr = M.assign_worker(state, worker.id, levelId, nkey, key, "until_completed")
+            if not assignErr then
+              return
+            end
+          end
+        end
+      end
+      for _, off in ipairs(neighborOffsets) do
+        local nx, ny = pos.x + off[1], pos.y + off[2]
+        local nkey = nx .. "," .. ny
+        if not visited[nkey] then
+          visited[nkey] = true
+          queue[#queue + 1] = { x = nx, y = ny }
+        end
+      end
+    end
+  end
+
+  local startCell = level.cells[start.x .. "," .. start.y]
+  if startCell and not startCell.occupiedBy then
+    startCell.occupiedBy = worker.id
+    worker.positionCellId = start.x .. "," .. start.y
+    worker.assignedLevelId = levelId
+  end
+end
+
 return M

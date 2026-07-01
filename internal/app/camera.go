@@ -15,12 +15,6 @@ func NewCamera() *Camera {
 func (c *Camera) Move(dx, dy float64) {
 	c.X += dx
 	c.Y += dy
-	if c.X < 0 {
-		c.X = 0
-	}
-	if c.Y < 0 {
-		c.Y = 0
-	}
 }
 
 func (c *Camera) SetZoom(z float64) {
@@ -31,4 +25,31 @@ func (c *Camera) SetZoom(z float64) {
 		z = 4
 	}
 	c.Zoom = z
+}
+
+// Clamp keeps the camera from panning past the generated map, so the map
+// never tears away from the screen edge leaving empty space. minX/minY/maxX
+// are in the same world-pixel units as c.X/c.Y; viewportW/H is how many world
+// pixels are visible on screen at the current zoom.
+func (c *Camera) Clamp(minX, minY, maxX, maxY, viewportW, viewportH float64) {
+	maxCamX := maxX - viewportW
+	if maxCamX < minX {
+		maxCamX = minX
+	}
+	maxCamY := maxY - viewportH
+	if maxCamY < minY {
+		maxCamY = minY
+	}
+	if c.X < minX {
+		c.X = minX
+	}
+	if c.X > maxCamX {
+		c.X = maxCamX
+	}
+	if c.Y < minY {
+		c.Y = minY
+	}
+	if c.Y > maxCamY {
+		c.Y = maxCamY
+	}
 }

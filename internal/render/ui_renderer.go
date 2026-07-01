@@ -31,6 +31,39 @@ func drawUI(screen *ebiten.Image, vm ViewModel) {
 
 	drawHireButton(screen, vm, phase, money)
 	drawWorkersPanel(screen, vm)
+	drawResourcesPanel(screen, vm)
+}
+
+// drawResourcesPanel lists every unlocked resource's stored/capacity totals
+// (REQUIREMENTS.md storage model), anchored to the top-right so it never
+// overlaps the worker roster on the left.
+func drawResourcesPanel(screen *ebiten.Image, vm ViewModel) {
+	if vm.Resources == nil {
+		return
+	}
+	list, _ := vm.Resources["resources"].([]any)
+	if len(list) == 0 {
+		return
+	}
+
+	x, y := ScreenWidth-220, 8
+	ebitenutil.DebugPrintAt(screen, "Resources:", x, y)
+	y += 16
+
+	for _, raw := range list {
+		resource, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		stored, _ := resource["totalStored"].(float64)
+		capacity, _ := resource["totalCapacity"].(float64)
+		if stored == 0 && capacity == 0 {
+			continue
+		}
+		name, _ := resource["name"].(string)
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s: %.0f/%.0f", name, stored, capacity), x, y)
+		y += 14
+	}
 }
 
 func drawHireButton(screen *ebiten.Image, vm ViewModel, phase string, money float64) {

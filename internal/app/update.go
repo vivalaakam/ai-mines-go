@@ -1,6 +1,10 @@
 package app
 
-import "log"
+import (
+	"log"
+
+	"github.com/vivalaakam/ai-mines-go/internal/render"
+)
 
 // Update runs once per Ebitengine frame. It never computes gameplay outcomes
 // itself: input only adjusts local camera state, and the only game-affecting
@@ -11,6 +15,16 @@ func (g *Game) Update() error {
 	g.camera.Move(input.CameraDX, input.CameraDY)
 	if input.ZoomDelta != 0 {
 		g.camera.SetZoom(g.camera.Zoom + input.ZoomDelta)
+	}
+	if g.mapBounds != nil {
+		g.camera.Clamp(
+			g.mapBounds.MinX*render.TileSize,
+			g.mapBounds.MinY*render.TileSize,
+			(g.mapBounds.MaxX+1)*render.TileSize,
+			(g.mapBounds.MaxY+1)*render.TileSize,
+			render.ScreenWidth/g.camera.Zoom,
+			render.ScreenHeight/g.camera.Zoom,
+		)
 	}
 	if input.HireWorkerClicked {
 		if err := g.hireWorker(); err != nil {
@@ -54,7 +68,7 @@ func (g *Game) hireWorker() error {
 	}
 	level, _ := workers["nextPurchasableWorkerLevel"].(float64)
 
-	result, err := g.engine.Apply("buy_worker", map[string]any{"workerLevel": level})
+	result, err := g.engine.Apply("buy_worker", map[string]any{"workerLevel": level, "levelId": g.levelID})
 	if err != nil {
 		return err
 	}

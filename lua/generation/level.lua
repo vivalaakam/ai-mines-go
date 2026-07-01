@@ -14,6 +14,7 @@ function M.new_level(id, depth, seedPhrase, generatorVersion)
     generatorVersion = generatorVersion,
     cells = {},
     generatedChunks = {},
+    bounds = nil,
     activeMiningCells = {},
     entranceCell = nil,
     stairsCell = nil,

@@ -43,6 +43,15 @@ local function fill_chunk(level, cx, cy)
     end
   end
   level.generatedChunks[M.chunk_key(cx, cy)] = true
+
+  local minX, minY, maxX, maxY = ox, oy, ox + M.CHUNK_SIZE - 1, oy + M.CHUNK_SIZE - 1
+  if level.bounds then
+    minX = math.min(level.bounds.minX, minX)
+    minY = math.min(level.bounds.minY, minY)
+    maxX = math.max(level.bounds.maxX, maxX)
+    maxY = math.max(level.bounds.maxY, maxY)
+  end
+  level.bounds = { minX = minX, minY = minY, maxX = maxX, maxY = maxY }
 end
 
 --- Forces a square area (size x size, centered on cx,cy) to a passable kind.

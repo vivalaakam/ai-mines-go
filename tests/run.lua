@@ -357,6 +357,17 @@ test("worker purchase respects highestUnlockedWorkerLevel - 2 formula", function
   )
 end)
 
+test("buying a worker with a levelId deploys it onto the map immediately", function()
+  engine.new_game("auto-deploy-seed")
+  local bought = engine.apply({ type = "buy_worker", workerLevel = 1, levelId = "level_1" })
+  assert(bought.ok, "buy_worker should succeed: " .. (bought.error and bought.error.message or ""))
+
+  local workers = engine.read({ type = "get_workers" }).data
+  local worker = workers.workers[1]
+  assert(worker.positionCellId ~= nil, "freshly bought worker should have a positionCellId")
+  assert_eq(worker.assignedLevelId, "level_1", "freshly bought worker should be attached to the level")
+end)
+
 test("orders: available order can be declined, and accepting with enough stock completes it immediately", function()
   engine.new_game("orders-seed")
   local orders = engine.read({ type = "get_available_orders" }).data.orders

@@ -20,6 +20,15 @@ type Game struct {
 	camera      *Camera
 	accumulator *TickAccumulator
 	levelID     string
+	mapBounds   *MapBounds
+}
+
+// MapBounds is the known-generated extent of the current level, in world
+// cell coordinates (inclusive). Populated from get_level_view's "bounds"
+// field each Draw and used by Update to keep the camera from panning past
+// the generated map into empty space.
+type MapBounds struct {
+	MinX, MinY, MaxX, MaxY float64
 }
 
 // NewGame wires an already-loaded/created engine to the Ebitengine loop. store

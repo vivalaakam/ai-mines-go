@@ -3,7 +3,11 @@
 // hover/selection/camera state may live here (REQUIREMENTS.md §Render/UI Layer).
 package render
 
-import "github.com/hajimehoshi/ebiten/v2"
+import (
+	"math"
+
+	"github.com/hajimehoshi/ebiten/v2"
+)
 
 // TileSize is the on-screen pixel size of one game cell at zoom=1.
 const TileSize = 24
@@ -16,12 +20,18 @@ const (
 	ScreenHeight = 720
 )
 
-// ViewportCellsWide/Tall bound how many cells get queried and drawn per frame,
-// sized to fill the logical screen at zoom=1.
-const (
-	ViewportCellsWide = ScreenWidth / TileSize
-	ViewportCellsTall = ScreenHeight / TileSize
-)
+// ViewportCellCounts returns how many cells to query/draw so the map always
+// fills the full logical screen regardless of zoom - zooming in shows fewer,
+// bigger cells; zooming out shows more, smaller cells, but the covered screen
+// area never grows or shrinks.
+func ViewportCellCounts(zoom float64) (int, int) {
+	if zoom <= 0 {
+		zoom = 1
+	}
+	w := int(math.Ceil(ScreenWidth/(TileSize*zoom))) + 1
+	h := int(math.Ceil(ScreenHeight/(TileSize*zoom))) + 1
+	return w, h
+}
 
 type Camera struct {
 	X, Y float64
@@ -36,6 +46,7 @@ type ViewModel struct {
 	PlayerSummary map[string]any
 	ShiftSummary  map[string]any
 	Workers       map[string]any
+	Resources     map[string]any
 }
 
 func Draw(screen *ebiten.Image, vm ViewModel) {

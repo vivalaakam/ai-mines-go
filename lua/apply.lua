@@ -61,6 +61,9 @@ handlers["buy_worker"] = function(state, cmd)
   if err then
     return fail(err)
   end
+  if cmd.levelId then
+    workersMod.deploy_worker(state, worker, cmd.levelId)
+  end
   return ok({ data = worker })
 end
 
