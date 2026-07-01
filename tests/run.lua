@@ -406,7 +406,16 @@ test("merge stops busy workers and merges them (the drag-onto-another-worker cas
       .. (merge.error and merge.error.message or "")
   )
   assert_eq(merge.data.level, 2, "merged worker level")
-  assert_eq(merge.data.state, "idle", "freshly merged worker should start idle")
+  assert_eq(
+    merge.data.positionCellId,
+    minePairs[2].positionId,
+    "merged worker should take over the position of the worker it was dropped onto"
+  )
+  assert_eq(
+    merge.data.state,
+    "working",
+    "merged worker should resume mining in place instead of vanishing from the map"
+  )
 end)
 
 test("merge failure (mismatched levels) restores each worker's previous mining assignment", function()

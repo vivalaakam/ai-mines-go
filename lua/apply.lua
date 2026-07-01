@@ -49,6 +49,20 @@ end
 -- before the drag interrupted it, instead of leaving it stranded idle.
 handlers["merge_workers"] = function(state, cmd)
   local workerIds = cmd.workerIds or {}
+
+  -- The second id is "the one dropped onto" - capture its map placement
+  -- before anything is stopped/detached so the merged worker can take over
+  -- that exact spot afterwards (REQUIREMENTS UX: it should simply level up
+  -- in place instead of vanishing from the map).
+  local targetWorker = state.workers[workerIds[2]]
+  local targetPlacement = targetWorker
+    and {
+      levelId = targetWorker.assignedLevelId,
+      targetCellId = targetWorker.targetCellId,
+      positionCellId = targetWorker.positionCellId,
+      assignmentMode = targetWorker.assignmentMode,
+    }
+
   local previousAssignments = {}
   for _, workerId in ipairs(workerIds) do
     local worker = state.workers[workerId]
@@ -79,6 +93,22 @@ handlers["merge_workers"] = function(state, cmd)
     end
     return fail(err)
   end
+
+  if targetPlacement and targetPlacement.levelId and targetPlacement.positionCellId then
+    if targetPlacement.targetCellId then
+      workersMod.assign_worker(
+        state,
+        worker.id,
+        targetPlacement.levelId,
+        targetPlacement.targetCellId,
+        targetPlacement.positionCellId,
+        targetPlacement.assignmentMode
+      )
+    else
+      workersMod.place_idle_worker(state, worker, targetPlacement.levelId, targetPlacement.positionCellId)
+    end
+  end
+
   return ok({ data = worker })
 end
 

@@ -105,6 +105,19 @@ function M.assign_worker(state, workerId, levelId, targetCellId, positionCellId,
   return worker, nil
 end
 
+--- Stands an idle worker on positionCellId without mining anything - used to
+--- keep a worker visible on the map (e.g. after a merge) when the spot it's
+--- taking over wasn't an active mining assignment.
+function M.place_idle_worker(state, worker, levelId, positionCellId)
+  local level = state.levels[levelId]
+  local cell = level and level.cells[positionCellId]
+  if cell and not cell.occupiedBy then
+    cell.occupiedBy = worker.id
+    worker.positionCellId = positionCellId
+    worker.assignedLevelId = levelId
+  end
+end
+
 --- Assigns a worker to mine targetCellId without a pre-chosen position: tries
 --- each adjacent cell in turn and uses the first one assign_worker accepts
 --- (open, reachable, not already occupied/claimed from that side).
@@ -155,6 +168,11 @@ function M.merge_workers(state, workerIds)
     return nil, err("worker_level_mismatch", "Workers must be the same level to merge")
   end
 
+  -- Detach before deleting so neither worker leaves a stale occupiedBy/
+  -- assignedWorkers reference behind (a no-op for already-idle workers with
+  -- no map placement).
+  M.detach_worker(state, w1)
+  M.detach_worker(state, w2)
   state.workers[w1.id] = nil
   state.workers[w2.id] = nil
   local newLevel = w1.level + 1
