@@ -30,7 +30,13 @@ function M.new_deposit(x, y, depth, rng)
 
   local resourceId = genResources.pick_resource(rng, depth)
   local components = {
-    { type = "rock", resourceId = nil, ratio = rockRatio, initialAmount = totalUnits * rockRatio, remainingAmount = totalUnits * rockRatio },
+    {
+      type = "rock",
+      resourceId = nil,
+      ratio = rockRatio,
+      initialAmount = totalUnits * rockRatio,
+      remainingAmount = totalUnits * rockRatio,
+    },
   }
 
   if resourceId then

@@ -13,7 +13,7 @@ func openTestAdapter(t *testing.T) *Adapter {
 	if err != nil {
 		t.Fatalf("Open() error: %v", err)
 	}
-	t.Cleanup(func() { a.Close() })
+	t.Cleanup(func() { _ = a.Close() })
 	return a
 }
 

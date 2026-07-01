@@ -13,10 +13,18 @@ local function next_id(state, kind)
 end
 
 local function side_of(target, position)
-  if position.x == target.x and position.y == target.y - 1 then return "north" end
-  if position.x == target.x and position.y == target.y + 1 then return "south" end
-  if position.x == target.x - 1 and position.y == target.y then return "west" end
-  if position.x == target.x + 1 and position.y == target.y then return "east" end
+  if position.x == target.x and position.y == target.y - 1 then
+    return "north"
+  end
+  if position.x == target.x and position.y == target.y + 1 then
+    return "south"
+  end
+  if position.x == target.x - 1 and position.y == target.y then
+    return "west"
+  end
+  if position.x == target.x + 1 and position.y == target.y then
+    return "east"
+  end
   return nil
 end
 

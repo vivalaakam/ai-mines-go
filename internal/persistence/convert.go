@@ -89,7 +89,7 @@ func (a *Adapter) saveState(saveID string, state map[string]any) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }() // no-op once Commit succeeds
 
 	if _, err := tx.Exec(`DELETE FROM saves WHERE id = ?`, saveID); err != nil {
 		return fmt.Errorf("clearing previous save: %w", err)

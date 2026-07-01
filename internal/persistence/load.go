@@ -79,7 +79,7 @@ func (a *Adapter) loadLevels(saveID string) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("querying levels: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	levels := map[string]any{}
 	type levelRow struct {
@@ -135,7 +135,7 @@ func (a *Adapter) loadChunks(saveID, levelID string, level map[string]any) error
 	if err != nil {
 		return fmt.Errorf("querying chunks: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	generatedChunks := asMap(level["generatedChunks"])
 	for rows.Next() {
@@ -155,7 +155,7 @@ func (a *Adapter) loadCells(saveID, levelID string, level map[string]any) error 
 	if err != nil {
 		return fmt.Errorf("querying cells: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	cells := asMap(level["cells"])
 	for rows.Next() {
@@ -191,7 +191,7 @@ func (a *Adapter) loadCellComponents(saveID, levelID string, cells map[string]an
 	if err != nil {
 		return fmt.Errorf("querying cell_components: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
 		var x, y int
@@ -225,7 +225,7 @@ func (a *Adapter) loadWorkers(saveID string, levels map[string]any) (map[string]
 	if err != nil {
 		return nil, fmt.Errorf("querying workers: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	workers := map[string]any{}
 	for rows.Next() {
@@ -271,7 +271,7 @@ func (a *Adapter) loadStorages(saveID string) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("querying storages: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	storages := map[string]any{}
 	for rows.Next() {
@@ -296,7 +296,7 @@ func (a *Adapter) loadOrders(saveID string) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("querying orders: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	orders := map[string]any{}
 	var orderIDs []string
@@ -339,7 +339,7 @@ func (a *Adapter) loadOrderRequirements(saveID, orderID string, order map[string
 	if err != nil {
 		return fmt.Errorf("querying order_requirements: %w", err)
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	requirements := order["requirements"].([]any)
 	for rows.Next() {

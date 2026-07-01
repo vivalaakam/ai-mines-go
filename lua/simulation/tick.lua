@@ -64,7 +64,11 @@ function M.start_next_shift(state)
   end
   state.phase = "shift_running"
   state.gameTime.shiftIndex = state.gameTime.shiftIndex + 1
-  return { shiftIndex = state.gameTime.shiftIndex, events = { { type = "shift_started", shiftIndex = state.gameTime.shiftIndex } } }, nil
+  return {
+    shiftIndex = state.gameTime.shiftIndex,
+    events = { { type = "shift_started", shiftIndex = state.gameTime.shiftIndex } },
+  },
+    nil
 end
 
 return M

@@ -25,11 +25,11 @@ func Open(path string) (*Adapter, error) {
 		return nil, fmt.Errorf("opening sqlite database: %w", err)
 	}
 	if _, err := db.Exec("PRAGMA foreign_keys = ON;"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("enabling foreign keys: %w", err)
 	}
 	if _, err := db.Exec(schema); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("applying schema: %w", err)
 	}
 	return &Adapter{db: db}, nil

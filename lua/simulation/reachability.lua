@@ -27,7 +27,8 @@ function M.recompute(level)
     local cell = level.cells[chunksMod.cell_key(node.x, node.y)]
     if cell and cellsMod.is_passable(cell) then
       cell.accessibility = "reachable"
-      local neighbors = { { node.x + 1, node.y }, { node.x - 1, node.y }, { node.x, node.y + 1 }, { node.x, node.y - 1 } }
+      local neighbors =
+        { { node.x + 1, node.y }, { node.x - 1, node.y }, { node.x, node.y + 1 }, { node.x, node.y - 1 } }
       for _, n in ipairs(neighbors) do
         local nx, ny = n[1], n[2]
         local nkey = chunksMod.cell_key(nx, ny)

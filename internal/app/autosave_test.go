@@ -17,7 +17,7 @@ func TestAutosaveEventTriggersPersistenceAdapter(t *testing.T) {
 	if err != nil {
 		t.Fatalf("persistence.Open() error: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	engine, err := store.CreateNewEngine("save-1", "autosave-seed")
 	if err != nil {

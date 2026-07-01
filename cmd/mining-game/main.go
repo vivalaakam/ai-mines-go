@@ -23,7 +23,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open save database: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	var engine *luaengine.Engine
 	loaded, err := store.LoadEngine(saveID)

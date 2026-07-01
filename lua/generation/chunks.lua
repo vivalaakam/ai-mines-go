@@ -92,7 +92,15 @@ local function carve_path(level, rng, x1, y1, x2, y2)
     else
       -- random cardinal wiggle
       local dir = rng:next_int(1, 4)
-      if dir == 1 then dx = 1 elseif dir == 2 then dx = -1 elseif dir == 3 then dy = 1 else dy = -1 end
+      if dir == 1 then
+        dx = 1
+      elseif dir == 2 then
+        dx = -1
+      elseif dir == 3 then
+        dy = 1
+      else
+        dy = -1
+      end
     end
     x, y = x + dx, y + dy
   end

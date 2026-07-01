@@ -158,7 +158,11 @@ end
 
 test("worker mines a deposit: rock never enters storage, resource does, cell becomes empty", function()
   engine.new_game("mining-mechanics-seed")
-  local levelView = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } }).data
+  local levelView = engine.read({
+    type = "get_level_view",
+    levelId = "level_1",
+    viewport = { x = 0, y = 0, width = 32, height = 32 },
+  }).data
   local targetId, positionId, targetCell = find_minable_pair(levelView)
 
   local resourceId
@@ -176,8 +180,10 @@ test("worker mines a deposit: rock never enters storage, resource does, cell bec
 
   local assign = engine.apply({
     type = "assign_worker_to_target_cell",
-    workerId = buy.data.id, levelId = "level_1",
-    targetCellId = targetId, positionCellId = positionId,
+    workerId = buy.data.id,
+    levelId = "level_1",
+    targetCellId = targetId,
+    positionCellId = positionId,
     assignmentMode = "until_completed",
   })
   assert(assign.ok, "assign failed: " .. (assign.error and assign.error.message or ""))
@@ -193,18 +199,26 @@ test("worker mines a deposit: rock never enters storage, resource does, cell bec
         depleted = true
       end
     end
-    if depleted then break end
+    if depleted then
+      break
+    end
   end
   assert(depleted, "expected the deposit to fully deplete within 250 ticks")
 
   local storageState = engine.read({ type = "get_storage_state" }).data
   local totalStored = 0
   for _, s in ipairs(storageState.storages) do
-    if s.resourceId == resourceId then totalStored = totalStored + s.storedAmount end
+    if s.resourceId == resourceId then
+      totalStored = totalStored + s.storedAmount
+    end
   end
   assert(totalStored > 0, "expected some of the mined resource to have reached storage")
 
-  local view2 = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } }).data
+  local view2 = engine.read({
+    type = "get_level_view",
+    levelId = "level_1",
+    viewport = { x = 0, y = 0, width = 32, height = 32 },
+  }).data
   for _, c in ipairs(view2.cells) do
     if c.x .. "," .. c.y == targetId then
       assert_eq(c.kind, "empty", "depleted cell kind")
@@ -214,11 +228,17 @@ end)
 
 test("a full storage blocks only that resource without losing it", function()
   engine.new_game("full-storage-seed")
-  local levelView = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } }).data
+  local levelView = engine.read({
+    type = "get_level_view",
+    levelId = "level_1",
+    viewport = { x = 0, y = 0, width = 32, height = 32 },
+  }).data
   local targetId, positionId, targetCell = find_minable_pair(levelView)
   local resourceId
   for _, comp in ipairs(targetCell.components) do
-    if comp.type == "resource" then resourceId = comp.resourceId end
+    if comp.type == "resource" then
+      resourceId = comp.resourceId
+    end
   end
 
   local buy = engine.apply({ type = "buy_worker", workerLevel = 1 })
@@ -231,12 +251,17 @@ test("a full storage blocks only that resource without losing it", function()
   state.storages[buyStorage.data.id].capacity = 3
   engine.load_state(state)
 
-  assert(engine.apply({
-    type = "assign_worker_to_target_cell",
-    workerId = buy.data.id, levelId = "level_1",
-    targetCellId = targetId, positionCellId = positionId,
-    assignmentMode = "until_completed",
-  }).ok, "assign failed")
+  assert(
+    engine.apply({
+      type = "assign_worker_to_target_cell",
+      workerId = buy.data.id,
+      levelId = "level_1",
+      targetCellId = targetId,
+      positionCellId = positionId,
+      assignmentMode = "until_completed",
+    }).ok,
+    "assign failed"
+  )
   assert(engine.apply({ type = "start_next_shift" }).ok, "start_next_shift failed")
 
   local sawBlocked = false
@@ -245,20 +270,32 @@ test("a full storage blocks only that resource without losing it", function()
     assert(tr.ok, "tick failed")
     local workers = engine.read({ type = "get_workers" }).data.workers
     for _, w in ipairs(workers) do
-      if w.state == "blocked_by_storage" then sawBlocked = true end
+      if w.state == "blocked_by_storage" then
+        sawBlocked = true
+      end
     end
-    if sawBlocked then break end
+    if sawBlocked then
+      break
+    end
   end
   assert(sawBlocked, "expected the worker to become blocked_by_storage once the tiny storage filled up")
 
   local storageState = engine.read({ type = "get_storage_state" }).data.storages[1]
   assert(storageState.storedAmount <= storageState.capacity, "storage must never exceed its capacity")
-  assert_eq(storageState.storedAmount, storageState.capacity, "storage should be exactly full, not overflowed or under-filled forever")
+  assert_eq(
+    storageState.storedAmount,
+    storageState.capacity,
+    "storage should be exactly full, not overflowed or under-filled forever"
+  )
 end)
 
 test("only one worker may occupy a given position cell", function()
   engine.new_game("occupancy-seed")
-  local levelView = engine.read({ type = "get_level_view", levelId = "level_1", viewport = { x = 0, y = 0, width = 32, height = 32 } }).data
+  local levelView = engine.read({
+    type = "get_level_view",
+    levelId = "level_1",
+    viewport = { x = 0, y = 0, width = 32, height = 32 },
+  }).data
   local targetId, positionId = find_minable_pair(levelView)
 
   local w1 = engine.apply({ type = "buy_worker", workerLevel = 1 })
@@ -266,14 +303,22 @@ test("only one worker may occupy a given position cell", function()
   assert(w1.ok and w2.ok, "buy_worker failed")
 
   local a1 = engine.apply({
-    type = "assign_worker_to_target_cell", workerId = w1.data.id, levelId = "level_1",
-    targetCellId = targetId, positionCellId = positionId, assignmentMode = "until_completed",
+    type = "assign_worker_to_target_cell",
+    workerId = w1.data.id,
+    levelId = "level_1",
+    targetCellId = targetId,
+    positionCellId = positionId,
+    assignmentMode = "until_completed",
   })
   assert(a1.ok, "first assignment should succeed")
 
   local a2 = engine.apply({
-    type = "assign_worker_to_target_cell", workerId = w2.data.id, levelId = "level_1",
-    targetCellId = targetId, positionCellId = positionId, assignmentMode = "until_completed",
+    type = "assign_worker_to_target_cell",
+    workerId = w2.data.id,
+    levelId = "level_1",
+    targetCellId = targetId,
+    positionCellId = positionId,
+    assignmentMode = "until_completed",
   })
   assert(not a2.ok, "second worker must not be able to share the same position cell")
   assert_eq(a2.error.code, "position_occupied", "expected position_occupied")
@@ -305,7 +350,11 @@ test("worker purchase respects highestUnlockedWorkerLevel - 2 formula", function
   state.money = 100000
   engine.load_state(state)
   local ok = engine.apply({ type = "buy_worker", workerLevel = 2 })
-  assert(ok.ok, "should be able to buy level 2 worker once highestUnlockedWorkerLevel is 4 (4-2=2): " .. (ok.error and ok.error.message or ""))
+  assert(
+    ok.ok,
+    "should be able to buy level 2 worker once highestUnlockedWorkerLevel is 4 (4-2=2): "
+      .. (ok.error and ok.error.message or "")
+  )
 end)
 
 test("orders: available order can be declined, and accepting with enough stock completes it immediately", function()
@@ -319,8 +368,10 @@ test("orders: available order can be declined, and accepting with enough stock c
   -- Give ourselves a pile of every depth-1 resource, then accept an order that
   -- only needs those, expecting immediate completion.
   local state = engine.export_state()
-  state.storages["storage_test"] = { id = "storage_test", resourceId = "stone", level = 1, capacity = 10000, storedAmount = 10000 }
-  state.storages["storage_test_2"] = { id = "storage_test_2", resourceId = "coal", level = 1, capacity = 10000, storedAmount = 10000 }
+  state.storages["storage_test"] =
+    { id = "storage_test", resourceId = "stone", level = 1, capacity = 10000, storedAmount = 10000 }
+  state.storages["storage_test_2"] =
+    { id = "storage_test_2", resourceId = "coal", level = 1, capacity = 10000, storedAmount = 10000 }
   engine.load_state(state)
 
   local availableNow = engine.read({ type = "get_available_orders" }).data.orders
