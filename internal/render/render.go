@@ -8,10 +8,19 @@ import "github.com/hajimehoshi/ebiten/v2"
 // TileSize is the on-screen pixel size of one game cell at zoom=1.
 const TileSize = 24
 
-// ViewportCellsWide/Tall bound how many cells get queried and drawn per frame.
+// ScreenWidth/Height is the fixed logical resolution Game.Layout reports.
+// Ebitengine scales this canvas up to fill the real window/fullscreen output,
+// so UI elements sized against these constants scale with the screen for free.
 const (
-	ViewportCellsWide = 40
-	ViewportCellsTall = 30
+	ScreenWidth  = 1280
+	ScreenHeight = 720
+)
+
+// ViewportCellsWide/Tall bound how many cells get queried and drawn per frame,
+// sized to fill the logical screen at zoom=1.
+const (
+	ViewportCellsWide = ScreenWidth / TileSize
+	ViewportCellsTall = ScreenHeight / TileSize
 )
 
 type Camera struct {

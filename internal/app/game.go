@@ -3,6 +3,7 @@ package app
 import (
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
 	"github.com/vivalaakam/ai-mines-go/internal/persistence"
+	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
 
 // TicksPerSecond is Ebitengine's default TPS; one game tick = one real second
@@ -34,6 +35,13 @@ func NewGame(engine *luaengine.Engine, store *persistence.Adapter, saveID string
 	}
 }
 
+// Layout returns a fixed logical resolution rather than echoing back
+// outsideWidth/outsideHeight. Ebitengine then scales this logical canvas up
+// to fill the actual window/fullscreen output (letterboxed, aspect-preserved),
+// which is what makes the map/HUD/buttons scale with the screen instead of
+// staying pinned to a small corner of a large fullscreen framebuffer.
+// CursorPosition() already reports clicks in these same logical coordinates,
+// so hit-testing (e.g. render.HireWorkerButton) needs no extra conversion.
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return outsideWidth, outsideHeight
+	return render.ScreenWidth, render.ScreenHeight
 }

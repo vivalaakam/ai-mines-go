@@ -30,6 +30,7 @@ func drawUI(screen *ebiten.Image, vm ViewModel) {
 	ebitenutil.DebugPrintAt(screen, line, 8, 8)
 
 	drawHireButton(screen, vm, phase, money)
+	drawWorkersPanel(screen, vm)
 }
 
 func drawHireButton(screen *ebiten.Image, vm ViewModel, phase string, money float64) {
@@ -48,4 +49,56 @@ func drawHireButton(screen *ebiten.Image, vm ViewModel, phase string, money floa
 	b := HireWorkerButton
 	vector.FillRect(screen, float32(b.Min.X), float32(b.Min.Y), float32(b.Dx()), float32(b.Dy()), fill, false)
 	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Hire Lv%.0f worker ($%.0f)", level, cost), b.Min.X+6, b.Min.Y+6)
+}
+
+// workersPanelMaxRows caps how many worker rows the roster prints so it can
+// never grow past the screen even with a large pool.
+const workersPanelMaxRows = 14
+
+var workersPanelOrigin = image.Pt(8, 68)
+
+// drawWorkersPanel lists every worker in the global pool (REQUIREMENTS.md
+// §17), not just the ones currently mining. Idle/just-purchased workers have
+// no positionCellId yet, so drawWorkers (worker_renderer.go) never places them
+// on the map - this roster is the only place they're visible until assigned.
+func drawWorkersPanel(screen *ebiten.Image, vm ViewModel) {
+	if vm.Workers == nil {
+		return
+	}
+	list, _ := vm.Workers["workers"].([]any)
+	if len(list) == 0 {
+		return
+	}
+
+	x, y := workersPanelOrigin.X, workersPanelOrigin.Y
+	ebitenutil.DebugPrintAt(screen, "Workers:", x, y)
+	y += 16
+
+	shown := list
+	overflow := 0
+	if len(shown) > workersPanelMaxRows {
+		overflow = len(shown) - workersPanelMaxRows
+		shown = shown[:workersPanelMaxRows]
+	}
+
+	for _, raw := range shown {
+		worker, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, _ := worker["id"].(string)
+		level, _ := worker["level"].(float64)
+		state, _ := worker["state"].(string)
+
+		clr, ok := workerStateColors[state]
+		if !ok {
+			clr = workerStateColors["idle"]
+		}
+		vector.FillRect(screen, float32(x), float32(y+2), 8, 8, clr, false)
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s  Lv%.0f  %s", id, level, state), x+14, y)
+		y += 14
+	}
+	if overflow > 0 {
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("... +%d more", overflow), x+14, y)
+	}
 }

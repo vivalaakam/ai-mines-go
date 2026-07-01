@@ -7,8 +7,11 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/vector"
 )
 
+// ponytail: "unknown" is deliberately dark (fog of war) but kept well above
+// pure black so the scaled-up fullscreen canvas reads as "there's a map here,
+// mostly unexplored" rather than looking like empty screen real estate.
 var kindColors = map[string]color.RGBA{
-	"unknown":     {20, 20, 24, 255},
+	"unknown":     {38, 38, 44, 255},
 	"empty":       {70, 70, 78, 255},
 	"deposit":     {110, 78, 55, 255},
 	"obstacle":    {45, 45, 50, 255},
