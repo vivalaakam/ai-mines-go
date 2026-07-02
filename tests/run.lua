@@ -228,7 +228,8 @@ test("depleting a deposit auto-continues the worker onto an adjacent deposit", f
 
   local storages = {}
   for _, resource in ipairs(resourceConfig.list) do
-    storages[resource.id] = { id = resource.id, resourceId = resource.id, level = 1, capacity = math.huge, storedAmount = 0 }
+    storages[resource.id] =
+      { id = resource.id, resourceId = resource.id, level = 1, capacity = math.huge, storedAmount = 0 }
   end
 
   -- Worker stands at (0,0); deposit A is one tick from depleting to its west,
@@ -398,6 +399,91 @@ test("orders: available order can be declined, and accepting with enough stock c
   local accept = engine.apply({ type = "accept_order", orderId = target.id })
   assert(accept.ok, "accept_order failed: " .. (accept.error and accept.error.message or ""))
   assert_eq(accept.data.state, "completed", "order with enough stock should complete immediately on accept")
+end)
+
+test("orders: declining does not refill the pool; new orders arrive on 100-tick boundaries", function()
+  engine.new_game("orders-arrival-seed")
+  local before = engine.read({ type = "get_available_orders" }).data.orders
+  assert(#before > 0, "expected available orders at game start")
+  for _, order in ipairs(before) do
+    assert(engine.apply({ type = "decline_order", orderId = order.id }).ok, "decline_order failed")
+  end
+  assert_eq(#engine.read({ type = "get_available_orders" }).data.orders, 0, "pool must stay empty after declining")
+
+  engine.apply({ type = "tick", ticksPassed = 99 })
+  assert_eq(#engine.read({ type = "get_available_orders" }).data.orders, 0, "no arrivals off the 100-tick boundary")
+
+  -- 10 arrival boundaries at 50% chance each, deterministic for this seed.
+  engine.apply({ type = "tick", ticksPassed = 901 })
+  assert(
+    #engine.read({ type = "get_available_orders" }).data.orders > 0,
+    "expected at least one order to arrive within 1000 ticks"
+  )
+end)
+
+test("orders: accepted order ships partially every 50 ticks and pays per shipped unit", function()
+  engine.new_game("orders-shipment-seed")
+  local target = engine.read({ type = "get_available_orders" }).data.orders[1]
+  local accept = engine.apply({ type = "accept_order", orderId = target.id })
+  assert(accept.ok, "accept_order failed: " .. (accept.error and accept.error.message or ""))
+  assert_eq(accept.data.state, "accepted", "with empty storages the order must stay accepted")
+
+  local req = target.requirements[1]
+  assert(req.pricePerUnit and req.pricePerUnit > 0, "requirement must carry a pricePerUnit")
+  local partial = math.max(1, math.floor(req.requiredAmount / 2))
+  local state = engine.export_state()
+  state.storages[req.resourceId].storedAmount = partial
+  engine.load_state(state)
+
+  local moneyBefore = engine.read({ type = "get_player_summary" }).data.money
+  engine.apply({ type = "tick", ticksPassed = 49 })
+  local active = engine.read({ type = "get_active_orders" }).data.orders[1]
+  assert_eq(active.requirements[1].deliveredAmount, 0, "no shipment before the 50-tick boundary")
+
+  engine.apply({ type = "tick", ticksPassed = 1 })
+  local shipped = engine.read({ type = "get_active_orders" }).data.orders[1]
+  assert_eq(shipped.requirements[1].deliveredAmount, partial, "partial stock must be shipped on tick 50")
+  local moneyAfter = engine.read({ type = "get_player_summary" }).data.money
+  assert_eq(moneyAfter - moneyBefore, partial * req.pricePerUnit, "each shipped part is paid at the order's price")
+end)
+
+test("orders: stock is split proportionally between accepted orders on shipment", function()
+  engine.new_game("orders-proportional-seed")
+  local state = engine.export_state()
+  state.orders = {
+    order_a = {
+      id = "order_a",
+      state = "accepted",
+      rewardMoney = 200,
+      expiresAtTick = 100000,
+      acceptedAtTick = 0,
+      priority = 1,
+      requirements = { { resourceId = "stone", requiredAmount = 100, deliveredAmount = 0, pricePerUnit = 2 } },
+    },
+    order_b = {
+      id = "order_b",
+      state = "accepted",
+      rewardMoney = 900,
+      expiresAtTick = 100000,
+      acceptedAtTick = 0,
+      priority = 1,
+      requirements = { { resourceId = "stone", requiredAmount = 300, deliveredAmount = 0, pricePerUnit = 3 } },
+    },
+  }
+  state.storages.stone.storedAmount = 200
+  engine.load_state(state)
+
+  local moneyBefore = engine.read({ type = "get_player_summary" }).data.money
+  engine.apply({ type = "tick", ticksPassed = 50 })
+
+  local byId = {}
+  for _, order in ipairs(engine.read({ type = "get_active_orders" }).data.orders) do
+    byId[order.id] = order
+  end
+  assert_eq(byId.order_a.requirements[1].deliveredAmount, 50, "order_a gets its proportional share (100/400 of 200)")
+  assert_eq(byId.order_b.requirements[1].deliveredAmount, 150, "order_b gets its proportional share (300/400 of 200)")
+  local moneyAfter = engine.read({ type = "get_player_summary" }).data.money
+  assert_eq(moneyAfter - moneyBefore, 50 * 2 + 150 * 3, "each order is paid at its own per-unit price")
 end)
 
 test("merge combines two idle same-level workers into one worker of the next level", function()

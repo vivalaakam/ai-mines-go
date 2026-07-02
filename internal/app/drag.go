@@ -38,6 +38,10 @@ func (g *Game) handleWorkerDrag() error {
 			g.suppressNextClick = true
 			return nil
 		}
+		if consumed, err := g.handleOrderButtonClick(mx, my); consumed || err != nil {
+			g.suppressNextClick = consumed
+			return err
+		}
 		g.suppressNextClick = false
 		g.pressPos = image.Pt(mx, my)
 		cx, cy := render.ScreenToCell(mx, my, g.renderCamera())

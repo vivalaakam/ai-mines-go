@@ -56,6 +56,143 @@ func drawUI(screen *ebiten.Image, vm ViewModel) {
 	drawHireButton(screen, vm, money)
 	drawWorkersPanel(screen, vm)
 	drawResourcesPanel(screen, vm)
+	drawOrdersPanel(screen, vm)
+}
+
+// Orders panel layout, anchored to the right edge under the resources panel.
+// MaxAvailableOrderRows caps how many available orders get drawn (and thus
+// clickable buttons); internal/app hit-tests against the same index-based
+// rects, so both sides stay in sync by construction.
+const MaxAvailableOrderRows = 3
+
+var ordersPanelOrigin = image.Pt(ScreenWidth-260, 224)
+
+const (
+	availableOrderBlockH = 50
+	orderButtonW         = 62
+	orderButtonH         = 16
+)
+
+// AvailableOrderAcceptButton is the clickable rect of the i-th drawn available
+// order's Accept button - exported for internal/app hit-testing, same pattern
+// as HireWorkerButton.
+func AvailableOrderAcceptButton(i int) image.Rectangle {
+	x := ordersPanelOrigin.X
+	y := ordersPanelOrigin.Y + 16 + i*availableOrderBlockH + 30
+	return image.Rect(x, y, x+orderButtonW, y+orderButtonH)
+}
+
+// AvailableOrderDeclineButton is the clickable rect of the i-th drawn
+// available order's Decline button.
+func AvailableOrderDeclineButton(i int) image.Rectangle {
+	return AvailableOrderAcceptButton(i).Add(image.Pt(orderButtonW+8, 0))
+}
+
+// requirementsLine renders one order's requirements as e.g.
+// "stone 12/40 @$2, coal 0/15 @$5" (delivered/required at per-unit price).
+func requirementsLine(order map[string]any) string {
+	reqs, _ := order["requirements"].([]any)
+	line := ""
+	for _, raw := range reqs {
+		req, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		resourceID, _ := req["resourceId"].(string)
+		required, _ := req["requiredAmount"].(float64)
+		delivered, _ := req["deliveredAmount"].(float64)
+		price, _ := req["pricePerUnit"].(float64)
+		if line != "" {
+			line += ", "
+		}
+		line += fmt.Sprintf("%s %.0f/%.0f @$%.0f", resourceID, delivered, required, price)
+	}
+	return line
+}
+
+func orderProgress(order map[string]any) (delivered, required float64) {
+	reqs, _ := order["requirements"].([]any)
+	for _, raw := range reqs {
+		req, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		r, _ := req["requiredAmount"].(float64)
+		d, _ := req["deliveredAmount"].(float64)
+		required += r
+		delivered += d
+	}
+	return delivered, required
+}
+
+// drawOrdersPanel shows incoming (available) orders with Accept/Decline
+// buttons and active (accepted) orders with per-resource delivery progress.
+func drawOrdersPanel(screen *ebiten.Image, vm ViewModel) {
+	x, y := ordersPanelOrigin.X, ordersPanelOrigin.Y
+	ebitenutil.DebugPrintAt(screen, "Orders:", x, y)
+
+	var tick float64
+	if vm.AvailableOrders != nil {
+		tick, _ = vm.AvailableOrders["tick"].(float64)
+		available, _ := vm.AvailableOrders["orders"].([]any)
+		for i, raw := range available {
+			if i >= MaxAvailableOrderRows {
+				break
+			}
+			order, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			by := y + 16 + i*availableOrderBlockH
+			reward, _ := order["rewardMoney"].(float64)
+			expires, _ := order["expiresAtTick"].(float64)
+			ebitenutil.DebugPrintAt(screen, fmt.Sprintf("$%.0f  expires in %.0ft", reward, expires-tick), x, by)
+			ebitenutil.DebugPrintAt(screen, requirementsLine(order), x, by+14)
+
+			acc := AvailableOrderAcceptButton(i)
+			vector.FillRect(screen, float32(acc.Min.X), float32(acc.Min.Y), float32(acc.Dx()), float32(acc.Dy()), color.RGBA{60, 130, 60, 255}, false)
+			ebitenutil.DebugPrintAt(screen, "Accept", acc.Min.X+8, acc.Min.Y+1)
+
+			dec := AvailableOrderDeclineButton(i)
+			vector.FillRect(screen, float32(dec.Min.X), float32(dec.Min.Y), float32(dec.Dx()), float32(dec.Dy()), color.RGBA{130, 60, 60, 255}, false)
+			ebitenutil.DebugPrintAt(screen, "Decline", dec.Min.X+5, dec.Min.Y+1)
+		}
+	}
+
+	ay := y + 16 + MaxAvailableOrderRows*availableOrderBlockH + 6
+	ebitenutil.DebugPrintAt(screen, "Active orders:", x, ay)
+	ay += 16
+
+	var active []any
+	if vm.ActiveOrders != nil {
+		active, _ = vm.ActiveOrders["orders"].([]any)
+	}
+	if len(active) == 0 {
+		ebitenutil.DebugPrintAt(screen, "(none)", x, ay)
+		return
+	}
+	for _, raw := range active {
+		order, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		delivered, required := orderProgress(order)
+		ratio := 0.0
+		if required > 0 {
+			ratio = delivered / required
+		}
+		id, _ := order["id"].(string)
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s  %.0f%%", id, ratio*100), x, ay)
+		barX, barY := x+110, ay+3
+		vector.FillRect(screen, float32(barX), float32(barY), 120, 8, color.RGBA{50, 50, 55, 255}, false)
+		vector.FillRect(screen, float32(barX), float32(barY), float32(120*ratio), 8, color.RGBA{80, 160, 80, 255}, false)
+		ay += 14
+		ebitenutil.DebugPrintAt(screen, requirementsLine(order), x, ay)
+		ay += 16
+		if ay > ScreenHeight-20 {
+			break
+		}
+	}
 }
 
 // drawResourcesPanel lists every unlocked resource's stored amount,

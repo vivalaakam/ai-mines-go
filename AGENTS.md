@@ -445,7 +445,17 @@ If a resource has no free capacity, that resource is not mined.
 
 Lua owns order logic.
 
-Orders can require one or several resources.
+Orders can require one or several resources. Each requirement carries its own
+`pricePerUnit`, rolled deterministically from the resource's base-price range
+when the order is generated; `rewardMoney` is the order's full value
+(`sum(requiredAmount * pricePerUnit)`).
+
+New orders arrive periodically: on every tick divisible by
+`orderArrivalIntervalTicks` (default 100) there is an `orderArrivalChance`
+(default 0.5) roll — deterministic from seedPhrase + tick — for one new order,
+as long as fewer than `maxAvailableOrders` (default 3) are available. A new
+game seeds the pool once; accepting/declining an order does not instantly
+refill it.
 
 Order states:
 
@@ -461,7 +471,12 @@ If the player starts an order, it cannot be cancelled.
 
 If all required resources are available, an order can complete immediately.
 
-If not, the order can be accepted and filled as the required resources become available on later ticks.
+Otherwise the accepted order is shipped in parts: on every tick divisible by
+`orderShipmentIntervalTicks` (default 50) the engine ships whatever stock is
+available toward accepted orders (if there is anything to ship) and pays
+`amount * pricePerUnit` for each shipped part immediately. An order completes
+when all requirements are fully delivered — there is no extra lump payment on
+completion.
 
 When multiple active orders require the same resource, the engine must support allocation mode:
 
@@ -470,11 +485,14 @@ When multiple active orders require the same resource, the engine must support a
 "proportional"
 ```
 
-For MVP, prefer:
+The default is:
 
 ```lua
-"priority_based"
+"proportional"
 ```
+
+(proportional shares of remaining need; the rounding remainder is handed out
+by priority).
 
 Order selection and priority changes are allowed at any time.
 

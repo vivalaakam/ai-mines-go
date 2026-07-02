@@ -93,24 +93,27 @@ handlers["get_storage_state"] = function(state)
   return { storages = list }
 end
 
-handlers["get_available_orders"] = function(state)
+-- Orders are returned in a stable (id-sequence) sort so UI rows and their
+-- clickable buttons don't reshuffle between frames (pairs() order is random).
+local function orders_in_state(state, orderState)
   local list = {}
   for _, order in pairs(state.orders) do
-    if order.state == "available" then
+    if order.state == orderState then
       list[#list + 1] = order
     end
   end
-  return { orders = list }
+  table.sort(list, function(a, b)
+    return (tonumber(a.id:match("_(%d+)$")) or 0) < (tonumber(b.id:match("_(%d+)$")) or 0)
+  end)
+  return list
+end
+
+handlers["get_available_orders"] = function(state)
+  return { orders = orders_in_state(state, "available"), tick = state.gameTime.tick }
 end
 
 handlers["get_active_orders"] = function(state)
-  local list = {}
-  for _, order in pairs(state.orders) do
-    if order.state == "accepted" then
-      list[#list + 1] = order
-    end
-  end
-  return { orders = list }
+  return { orders = orders_in_state(state, "accepted"), tick = state.gameTime.tick }
 end
 
 handlers["get_resources"] = function(state)

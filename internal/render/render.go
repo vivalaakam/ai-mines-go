@@ -53,6 +53,8 @@ type ViewModel struct {
 	PlayerSummary    map[string]any
 	Workers          map[string]any
 	Resources        map[string]any
+	AvailableOrders  map[string]any
+	ActiveOrders     map[string]any
 	DraggingWorkerID string
 	SelectedWorkerID string
 	MergeConfirm     *MergeConfirm

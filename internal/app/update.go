@@ -92,6 +92,13 @@ func (g *Game) handleLuaEvents(events []any) {
 			g.autosave(event["reason"])
 		case "order_completed":
 			log.Printf("order completed: orderId=%v", event["orderId"])
+		case "order_shipped":
+			log.Printf("order shipped: orderId=%v resource=%v amount=%v payment=%v",
+				event["orderId"], event["resourceId"], event["amount"], event["payment"])
+		case "order_arrived":
+			log.Printf("order arrived: orderId=%v", event["orderId"])
+		case "order_expired":
+			log.Printf("order expired: orderId=%v", event["orderId"])
 		}
 	}
 }

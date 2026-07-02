@@ -37,6 +37,11 @@ type Game struct {
 	pressPos          image.Point
 	suppressNextClick bool
 
+	// lastAvailableOrderIDs caches the available-order ids in the exact order
+	// the orders panel drew them last frame, so Update can hit-test the
+	// index-based Accept/Decline button rects against the right order.
+	lastAvailableOrderIDs []string
+
 	// selectedWorkerID and pendingMerge back the click-to-select "cut/paste"
 	// gesture: click a worker to select it, click a deposit to move it there,
 	// click a same-level worker to ask for merge confirmation (see drag.go).

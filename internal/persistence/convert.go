@@ -269,9 +269,10 @@ func saveOrders(tx *sql.Tx, saveID string, orders map[string]any) error {
 		for idx, rawReq := range arr(order, "requirements") {
 			req := asMap(rawReq)
 			if _, err := tx.Exec(`
-				INSERT INTO order_requirements (save_id, order_id, idx, resource_id, required_amount, delivered_amount)
-				VALUES (?, ?, ?, ?, ?, ?)`,
+				INSERT INTO order_requirements (save_id, order_id, idx, resource_id, required_amount, delivered_amount, price_per_unit)
+				VALUES (?, ?, ?, ?, ?, ?, ?)`,
 				saveID, orderID, idx, str(req, "resourceId"), num(req, "requiredAmount"), num(req, "deliveredAmount"),
+				num(req, "pricePerUnit"),
 			); err != nil {
 				return fmt.Errorf("inserting order requirement %s[%d]: %w", orderID, idx, err)
 			}
