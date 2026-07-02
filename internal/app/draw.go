@@ -83,6 +83,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		Resources:        resources,
 		AvailableOrders:  availableOrders,
 		ActiveOrders:     activeOrders,
+		OrderEventLog:    g.orderEventLog,
 		DraggingWorkerID: g.draggingWorkerID,
 		SelectedWorkerID: g.selectedWorkerID,
 		MergeConfirm:     mergeConfirm,

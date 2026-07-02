@@ -48,24 +48,48 @@ func drawMergeModal(screen *ebiten.Image, vm ViewModel) {
 
 func drawUI(screen *ebiten.Image, vm ViewModel) {
 	money, _ := vm.PlayerSummary["money"].(float64)
-	workerCount, _ := vm.PlayerSummary["workerCount"].(float64)
-
-	line := fmt.Sprintf("money: %.0f | workers: %.0f", money, workerCount)
-	ebitenutil.DebugPrintAt(screen, line, 8, 8)
-
 	drawHireButton(screen, vm, money)
 	drawWorkersPanel(screen, vm)
-	drawResourcesPanel(screen, vm)
-	drawOrdersPanel(screen, vm)
 }
 
-// Orders panel layout, anchored to the right edge under the resources panel.
+// sidebarPadding is the inset between the sidebar's opaque background edges
+// and the text/buttons drawn inside it.
+const sidebarPadding = 12
+
+// sidebarX0 is the sidebar column's left edge in screen space.
+const sidebarX0 = MapWidth
+
+// drawSidebar paints the full-height, opaque info column (REQUIREMENTS.md UX:
+// the game field and the resources/orders HUD must not blend into each other,
+// so this is a solid background, not a translucent overlay on the map) and
+// stacks the player summary, resources, orders, and recent order-event log
+// inside it. Sections report back the next free y so they never overlap
+// regardless of how many resources/orders/events are actually present.
+func drawSidebar(screen *ebiten.Image, vm ViewModel) {
+	vector.FillRect(screen, float32(sidebarX0), 0, SidebarWidth, ScreenHeight, color.RGBA{22, 22, 26, 255}, false)
+	vector.StrokeRect(screen, float32(sidebarX0), 0, 1, ScreenHeight, 1, color.RGBA{60, 60, 68, 255}, false)
+
+	x := sidebarX0 + sidebarPadding
+	y := sidebarPadding
+
+	y = drawPlayerSummary(screen, vm, x, y)
+	y = drawResourcesPanel(screen, vm, x, y)
+	y = drawOrdersPanel(screen, vm, x, y)
+	drawOrderEventLog(screen, vm, x, y)
+}
+
+func drawPlayerSummary(screen *ebiten.Image, vm ViewModel, x, y int) int {
+	money, _ := vm.PlayerSummary["money"].(float64)
+	workerCount, _ := vm.PlayerSummary["workerCount"].(float64)
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("money: %.0f | workers: %.0f", money, workerCount), x, y)
+	return y + 20
+}
+
+// Orders panel layout, stacked inside the sidebar below the resources panel.
 // MaxAvailableOrderRows caps how many available orders get drawn (and thus
 // clickable buttons); internal/app hit-tests against the same index-based
 // rects, so both sides stay in sync by construction.
 const MaxAvailableOrderRows = 3
-
-var ordersPanelOrigin = image.Pt(ScreenWidth-260, 224)
 
 const (
 	availableOrderBlockH = 50
@@ -73,12 +97,19 @@ const (
 	orderButtonH         = 16
 )
 
+// availableOrdersOriginY is set by drawOrdersPanel each frame so
+// AvailableOrderAcceptButton/AvailableOrderDeclineButton (called by
+// internal/app for hit-testing, and by drawOrdersPanel itself) always agree
+// on where the available-orders list actually starts, even though that
+// position depends on the (variable-length) resources panel drawn above it.
+var availableOrdersOriginY = 224
+
 // AvailableOrderAcceptButton is the clickable rect of the i-th drawn available
 // order's Accept button - exported for internal/app hit-testing, same pattern
 // as HireWorkerButton.
 func AvailableOrderAcceptButton(i int) image.Rectangle {
-	x := ordersPanelOrigin.X
-	y := ordersPanelOrigin.Y + 16 + i*availableOrderBlockH + 30
+	x := sidebarX0 + sidebarPadding
+	y := availableOrdersOriginY + 16 + i*availableOrderBlockH + 30
 	return image.Rect(x, y, x+orderButtonW, y+orderButtonH)
 }
 
@@ -126,9 +157,10 @@ func orderProgress(order map[string]any) (delivered, required float64) {
 }
 
 // drawOrdersPanel shows incoming (available) orders with Accept/Decline
-// buttons and active (accepted) orders with per-resource delivery progress.
-func drawOrdersPanel(screen *ebiten.Image, vm ViewModel) {
-	x, y := ordersPanelOrigin.X, ordersPanelOrigin.Y
+// buttons and active (accepted) orders with per-resource delivery progress,
+// starting at (x,y) and returning the next free y.
+func drawOrdersPanel(screen *ebiten.Image, vm ViewModel, x, y int) int {
+	availableOrdersOriginY = y
 	ebitenutil.DebugPrintAt(screen, "Orders:", x, y)
 
 	var tick float64
@@ -169,8 +201,9 @@ func drawOrdersPanel(screen *ebiten.Image, vm ViewModel) {
 	}
 	if len(active) == 0 {
 		ebitenutil.DebugPrintAt(screen, "(none)", x, ay)
-		return
+		return ay + 16
 	}
+	barW := SidebarWidth - 2*sidebarPadding - 110
 	for _, raw := range active {
 		order, ok := raw.(map[string]any)
 		if !ok {
@@ -184,33 +217,51 @@ func drawOrdersPanel(screen *ebiten.Image, vm ViewModel) {
 		id, _ := order["id"].(string)
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s  %.0f%%", id, ratio*100), x, ay)
 		barX, barY := x+110, ay+3
-		vector.FillRect(screen, float32(barX), float32(barY), 120, 8, color.RGBA{50, 50, 55, 255}, false)
-		vector.FillRect(screen, float32(barX), float32(barY), float32(120*ratio), 8, color.RGBA{80, 160, 80, 255}, false)
+		vector.FillRect(screen, float32(barX), float32(barY), float32(barW), 8, color.RGBA{50, 50, 55, 255}, false)
+		vector.FillRect(screen, float32(barX), float32(barY), float32(float64(barW)*ratio), 8, color.RGBA{80, 160, 80, 255}, false)
 		ay += 14
 		ebitenutil.DebugPrintAt(screen, requirementsLine(order), x, ay)
 		ay += 16
-		if ay > ScreenHeight-20 {
+		if ay > ScreenHeight-80 {
 			break
 		}
 	}
+	return ay
 }
 
-// drawResourcesPanel lists every unlocked resource's stored amount,
-// anchored to the top-right so it never overlaps the worker roster on
-// the left. Storage is uncapped, so no capacity is shown.
-func drawResourcesPanel(screen *ebiten.Image, vm ViewModel) {
-	if vm.Resources == nil {
-		return
-	}
-	list, _ := vm.Resources["resources"].([]any)
-	if len(list) == 0 {
-		return
-	}
+// orderEventLogMaxLines caps how many recent order events (accepted,
+// shipped, arrived, expired, completed) are shown, so the sidebar's bottom
+// section has a fixed, predictable height.
+const orderEventLogMaxLines = 6
 
-	x, y := ScreenWidth-220, 8
+// drawOrderEventLog makes order events explicit in the sidebar itself
+// (arrivals, shipments and their payment, expirations) instead of only being
+// visible in the application log - vm.OrderEventLog is newest-first.
+func drawOrderEventLog(screen *ebiten.Image, vm ViewModel, x, y int) {
+	ebitenutil.DebugPrintAt(screen, "Recent order events:", x, y)
+	y += 16
+	if len(vm.OrderEventLog) == 0 {
+		ebitenutil.DebugPrintAt(screen, "(none yet)", x, y)
+		return
+	}
+	lines := vm.OrderEventLog
+	if len(lines) > orderEventLogMaxLines {
+		lines = lines[:orderEventLogMaxLines]
+	}
+	for _, line := range lines {
+		ebitenutil.DebugPrintAt(screen, line, x, y)
+		y += 14
+	}
+}
+
+// drawResourcesPanel lists every unlocked resource's stored amount, starting
+// at (x,y) and returning the next free y. Storage is uncapped, so no
+// capacity is shown.
+func drawResourcesPanel(screen *ebiten.Image, vm ViewModel, x, y int) int {
 	ebitenutil.DebugPrintAt(screen, "Resources:", x, y)
 	y += 16
 
+	list, _ := vm.Resources["resources"].([]any)
 	for _, raw := range list {
 		resource, ok := raw.(map[string]any)
 		if !ok {
@@ -224,6 +275,7 @@ func drawResourcesPanel(screen *ebiten.Image, vm ViewModel) {
 		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s: %.0f", name, stored), x, y)
 		y += 14
 	}
+	return y + 10
 }
 
 func drawHireButton(screen *ebiten.Image, vm ViewModel, money float64) {

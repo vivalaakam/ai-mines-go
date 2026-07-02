@@ -150,6 +150,16 @@
 - [x] Документация: AGENTS.md §Orders и REQUIREMENTS.md §25–26 — цена за единицу, оплата частями, каденции 50/100 тиков, proportional по умолчанию (заодно заменить устаревшее «в конце смены»)
 - [x] `make check` зелёный, коммит после прохождения проверок
 
+## Фаза 21 — UI-доработка: непрозрачный сайдбар и видимый лог событий заказов
+
+Фидбек: панель заказов рисовалась прямо поверх карты без фона (текст читался плохо на пёстрых тайлах), а события заказов (`order_shipped`/`order_arrived`/`order_expired`) были видны только в консоли, не в самом интерфейсе.
+
+- [x] Экран разделён на игровое поле (`render.MapWidth = ScreenWidth - SidebarWidth`) и полноразмерный по высоте сайдбар `render.SidebarWidth = 300` с непрозрачным фоном (`drawSidebar`); `ViewportCellCounts`/camera-clamp в `internal/app/update.go` считают ширину видимой карты от `MapWidth`, а не всего экрана
+- [x] Сводка денег/работников, список ресурсов и панель заказов (доступные+активные) перенесены в сайдбар с динамическим y-курсором (`drawPlayerSummary`/`drawResourcesPanel`/`drawOrdersPanel` возвращают следующий `y`), кнопка найма и ростер работников остаются оверлеем на игровом поле
+- [x] Клик в области сайдбара вне кнопок больше не трактуется как клик по карте (`handleWorkerDrag` в `internal/app/drag.go` проверяет `mx >= render.MapWidth`)
+- [x] Новый блок «Recent order events» в сайдбаре (`Game.orderEventLog`, newest-first, заполняется в `handleLuaEvents`/`logOrderEvent`) — события заказов теперь видны в самом UI, не только в логе
+- [x] `make check` зелёный (fmt, vet, lint, test, -race, build, stylua, lua tests), headless-тесты `internal/app` (в т.ч. `TestOrderButtonsAcceptAndDecline`) проходят без изменений сигнатур
+
 ## Открытые решения (не блокируют разработку, но требуют явного флага/конфига)
 
 - Переназначение работников во время активной смены
