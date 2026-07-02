@@ -38,6 +38,13 @@ type Camera struct {
 	Zoom float64
 }
 
+// MergeConfirm describes an in-progress "merge these two workers?" modal,
+// shown after the player click-selects a worker and then clicks another
+// worker of the same level.
+type MergeConfirm struct {
+	Level int
+}
+
 // ViewModel bundles everything one frame's Draw needs, all sourced from
 // engine.read query results (map[string]any as decoded by luaengine).
 type ViewModel struct {
@@ -47,10 +54,13 @@ type ViewModel struct {
 	Workers          map[string]any
 	Resources        map[string]any
 	DraggingWorkerID string
+	SelectedWorkerID string
+	MergeConfirm     *MergeConfirm
 }
 
 func Draw(screen *ebiten.Image, vm ViewModel) {
 	drawMap(screen, vm)
 	drawWorkers(screen, vm)
 	drawUI(screen, vm)
+	drawMergeModal(screen, vm)
 }

@@ -16,6 +16,36 @@ import (
 // layout constants between the render and input layers.
 var HireWorkerButton = image.Rect(8, 32, 230, 60)
 
+// mergeModalRect/MergeModalYesButton/MergeModalNoButton lay out the
+// merge-confirmation modal. Yes/No buttons are exported so internal/app can
+// hit-test clicks against the exact rectangles this package draws.
+var (
+	mergeModalRect      = image.Rect(ScreenWidth/2-110, ScreenHeight/2-40, ScreenWidth/2+110, ScreenHeight/2+40)
+	MergeModalYesButton = image.Rect(mergeModalRect.Min.X+10, mergeModalRect.Max.Y-32, mergeModalRect.Min.X+95, mergeModalRect.Max.Y-8)
+	MergeModalNoButton  = image.Rect(mergeModalRect.Max.X-95, mergeModalRect.Max.Y-32, mergeModalRect.Max.X-10, mergeModalRect.Max.Y-8)
+)
+
+// drawMergeModal shows the "merge these two workers?" confirmation prompt
+// triggered by click-selecting a worker and then clicking another worker of
+// the same level (see internal/app/drag.go handleWorkerClick).
+func drawMergeModal(screen *ebiten.Image, vm ViewModel) {
+	if vm.MergeConfirm == nil {
+		return
+	}
+	r := mergeModalRect
+	vector.FillRect(screen, float32(r.Min.X), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()), color.RGBA{30, 30, 30, 230}, false)
+	vector.StrokeRect(screen, float32(r.Min.X), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()), 2, color.RGBA{255, 255, 255, 255}, false)
+	ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Merge two Lv%d workers?", vm.MergeConfirm.Level), r.Min.X+10, r.Min.Y+10)
+
+	yes := MergeModalYesButton
+	vector.FillRect(screen, float32(yes.Min.X), float32(yes.Min.Y), float32(yes.Dx()), float32(yes.Dy()), color.RGBA{60, 130, 60, 255}, false)
+	ebitenutil.DebugPrintAt(screen, "Yes", yes.Min.X+28, yes.Min.Y+8)
+
+	no := MergeModalNoButton
+	vector.FillRect(screen, float32(no.Min.X), float32(no.Min.Y), float32(no.Dx()), float32(no.Dy()), color.RGBA{130, 60, 60, 255}, false)
+	ebitenutil.DebugPrintAt(screen, "No", no.Min.X+32, no.Min.Y+8)
+}
+
 func drawUI(screen *ebiten.Image, vm ViewModel) {
 	money, _ := vm.PlayerSummary["money"].(float64)
 	workerCount, _ := vm.PlayerSummary["workerCount"].(float64)

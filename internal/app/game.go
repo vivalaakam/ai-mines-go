@@ -1,6 +1,8 @@
 package app
 
 import (
+	"image"
+
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
 	"github.com/vivalaakam/ai-mines-go/internal/persistence"
 	"github.com/vivalaakam/ai-mines-go/internal/render"
@@ -30,8 +32,23 @@ type Game struct {
 	// lastLevelView caches the level view Draw last fetched, so Update can
 	// hit-test worker drag-and-drop against it without an extra engine.Read
 	// (one frame stale, which is imperceptible for mouse interaction).
-	lastLevelView    map[string]any
-	draggingWorkerID string
+	lastLevelView     map[string]any
+	draggingWorkerID  string
+	pressPos          image.Point
+	suppressNextClick bool
+
+	// selectedWorkerID and pendingMerge back the click-to-select "cut/paste"
+	// gesture: click a worker to select it, click a deposit to move it there,
+	// click a same-level worker to ask for merge confirmation (see drag.go).
+	selectedWorkerID string
+	pendingMerge     *PendingMerge
+}
+
+// PendingMerge holds a same-level worker pair awaiting the player's yes/no
+// confirmation in the merge modal.
+type PendingMerge struct {
+	WorkerA, WorkerB string
+	Level            int
 }
 
 // MapBounds is the known-generated extent of the current level, in world

@@ -71,6 +71,9 @@ func drawWorkers(screen *ebiten.Image, vm ViewModel) {
 		if id != "" && id == vm.DraggingWorkerID {
 			vector.StrokeCircle(screen, float32(x), float32(y), radius+2, 2, color.RGBA{255, 255, 255, 255}, true)
 		}
+		if id != "" && id == vm.SelectedWorkerID {
+			vector.StrokeCircle(screen, float32(x), float32(y), radius+2, 2, color.RGBA{80, 220, 255, 255}, true)
+		}
 		if state, _ := worker["state"].(string); state == "blocked_by_storage" {
 			vector.StrokeCircle(screen, float32(x), float32(y), radius, 2, color.RGBA{220, 40, 40, 255}, true)
 		}
