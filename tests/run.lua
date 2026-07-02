@@ -447,6 +447,43 @@ test("orders: accepted order ships partially every 50 ticks and pays per shipped
   assert_eq(moneyAfter - moneyBefore, partial * req.pricePerUnit, "each shipped part is paid at the order's price")
 end)
 
+test("orders: fractional storage is shipped as a whole number, remainder stays in storage", function()
+  engine.new_game("orders-fractional-seed")
+  local target = engine.read({ type = "get_available_orders" }).data.orders[1]
+  local accept = engine.apply({ type = "accept_order", orderId = target.id })
+  assert(accept.ok, "accept_order failed: " .. (accept.error and accept.error.message or ""))
+
+  -- Storage may legitimately hold a fractional amount (mining extracts a
+  -- speed-weighted, non-integer share per tick) - the order must still only
+  -- ever be delivered whole units, with the fractional remainder left behind.
+  local req = target.requirements[1]
+  local fractionalStock = 5.7
+  local state = engine.export_state()
+  state.storages[req.resourceId].storedAmount = fractionalStock
+  engine.load_state(state)
+
+  local moneyBefore = engine.read({ type = "get_player_summary" }).data.money
+  engine.apply({ type = "tick", ticksPassed = 50 })
+
+  local shipped = engine.read({ type = "get_active_orders" }).data.orders[1]
+  assert_eq(shipped.requirements[1].deliveredAmount, 5, "only the whole-unit part of fractional stock is delivered")
+
+  local storageState = engine.read({ type = "get_storage_state" }).data
+  local remaining
+  for _, s in ipairs(storageState.storages) do
+    if s.resourceId == req.resourceId then
+      remaining = s.storedAmount
+    end
+  end
+  assert(
+    math.abs(remaining - (fractionalStock - 5)) < 1e-9,
+    "the fractional remainder must stay in storage, not vanish or get shipped: got " .. tostring(remaining)
+  )
+
+  local moneyAfter = engine.read({ type = "get_player_summary" }).data.money
+  assert_eq(moneyAfter - moneyBefore, 5 * req.pricePerUnit, "payment is for the whole-unit amount actually shipped")
+end)
+
 test("orders: stock is split proportionally between accepted orders on shipment", function()
   engine.new_game("orders-proportional-seed")
   local state = engine.export_state()

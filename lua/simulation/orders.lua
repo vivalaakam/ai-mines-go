@@ -125,11 +125,21 @@ end
 
 --- Ships up to `amount` of one requirement: withdraws from storage, advances
 --- deliveredAmount, and pays the order's per-unit price for what was shipped.
+--- Storage may hold a fractional amount of a resource (mining extracts
+--- speed-weighted, non-integer shares per tick), but buyers only ever accept
+--- whole units, so the withdrawal is clamped to floor(min(amount,
+--- available)) - always an exact integer, leaving any fractional remainder
+--- untouched in storage for a later shipment to pick up.
 local function ship(state, order, req, amount, events)
   if amount <= 0 then
     return
   end
-  local withdrawn = storageMod.withdraw_resource(state, req.resourceId, amount)
+  local available = storageMod.total_stored(state, req.resourceId)
+  local wholeAmount = math.floor(math.min(amount, available))
+  if wholeAmount <= 0 then
+    return
+  end
+  local withdrawn = storageMod.withdraw_resource(state, req.resourceId, wholeAmount)
   if withdrawn <= 0 then
     return
   end
