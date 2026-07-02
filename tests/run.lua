@@ -175,8 +175,6 @@ test("worker mines a deposit: rock never enters storage, resource does, cell bec
 
   local buy = engine.apply({ type = "buy_worker", workerLevel = 1 })
   assert(buy.ok, "buy_worker failed")
-  local buyStorage = engine.apply({ type = "buy_storage", resourceId = resourceId })
-  assert(buyStorage.ok, "buy_storage failed")
 
   local assign = engine.apply({
     type = "assign_worker_to_target_cell",
@@ -224,66 +222,13 @@ test("worker mines a deposit: rock never enters storage, resource does, cell bec
   end
 end)
 
-test("a full storage blocks only that resource without losing it", function()
+test("storages exist for every resource from the start and never fill up", function()
   engine.new_game("full-storage-seed")
-  local levelView = engine.read({
-    type = "get_level_view",
-    levelId = "level_1",
-    viewport = { x = 0, y = 0, width = 32, height = 32 },
-  }).data
-  local targetId, positionId, targetCell = find_minable_pair(levelView)
-  local resourceId
-  for _, comp in ipairs(targetCell.components) do
-    if comp.type == "resource" then
-      resourceId = comp.resourceId
-    end
+  local storageState = engine.read({ type = "get_storage_state" }).data
+  assert(#storageState.storages > 0, "expected storages to be pre-created for every resource")
+  for _, s in ipairs(storageState.storages) do
+    assert(s.capacity == math.huge, "expected every storage to have unlimited capacity")
   end
-
-  local buy = engine.apply({ type = "buy_worker", workerLevel = 1 })
-  local buyStorage = engine.apply({ type = "buy_storage", resourceId = resourceId })
-  assert(buy.ok and buyStorage.ok, "setup failed")
-
-  -- Shrink the storage to a tiny capacity via the public export/load contract
-  -- (a legitimate way to build fixtures without touching engine internals).
-  local state = engine.export_state()
-  state.storages[buyStorage.data.id].capacity = 3
-  engine.load_state(state)
-
-  assert(
-    engine.apply({
-      type = "assign_worker_to_target_cell",
-      workerId = buy.data.id,
-      levelId = "level_1",
-      targetCellId = targetId,
-      positionCellId = positionId,
-      assignmentMode = "until_completed",
-    }).ok,
-    "assign failed"
-  )
-
-  local sawBlocked = false
-  for i = 1, 250 do
-    local tr = engine.apply({ type = "tick", ticksPassed = 1 })
-    assert(tr.ok, "tick failed")
-    local workers = engine.read({ type = "get_workers" }).data.workers
-    for _, w in ipairs(workers) do
-      if w.state == "blocked_by_storage" then
-        sawBlocked = true
-      end
-    end
-    if sawBlocked then
-      break
-    end
-  end
-  assert(sawBlocked, "expected the worker to become blocked_by_storage once the tiny storage filled up")
-
-  local storageState = engine.read({ type = "get_storage_state" }).data.storages[1]
-  assert(storageState.storedAmount <= storageState.capacity, "storage must never exceed its capacity")
-  assert_eq(
-    storageState.storedAmount,
-    storageState.capacity,
-    "storage should be exactly full, not overflowed or under-filled forever"
-  )
 end)
 
 test("only one worker may occupy a given position cell", function()
@@ -396,6 +341,126 @@ test("merge combines two idle same-level workers into one worker of the next lev
   assert_eq(merge.data.level, 2, "merged worker level")
   local workers = engine.read({ type = "get_workers" }).data.workers
   assert_eq(#workers, 1, "expected the two source workers to be replaced by exactly one merged worker")
+end)
+
+test("merge stops busy workers and merges them (the drag-onto-another-worker case)", function()
+  engine.new_game("busy-merge-seed")
+  local levelView = engine.read({
+    type = "get_level_view",
+    levelId = "level_1",
+    viewport = { x = 0, y = 0, width = 32, height = 32 },
+  }).data
+
+  local byCoord = {}
+  for _, c in ipairs(levelView.cells) do
+    byCoord[c.x .. "," .. c.y] = c
+  end
+  local used = {}
+  local minePairs = {}
+  for _, c in ipairs(levelView.cells) do
+    if c.kind == "deposit" and #minePairs < 2 then
+      local neighbors = { { c.x, c.y - 1 }, { c.x, c.y + 1 }, { c.x - 1, c.y }, { c.x + 1, c.y } }
+      for _, n in ipairs(neighbors) do
+        local key = n[1] .. "," .. n[2]
+        local nc = byCoord[key]
+        if
+          nc
+          and nc.accessibility == "reachable"
+          and (nc.kind == "empty" or nc.kind == "stairs_area")
+          and not used[key]
+        then
+          used[key] = true
+          minePairs[#minePairs + 1] = { targetId = c.x .. "," .. c.y, positionId = key }
+          break
+        end
+      end
+    end
+  end
+  assert(#minePairs >= 2, "expected at least two independent minable positions for this seed")
+
+  local b1 = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  local b2 = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  assert(b1.ok and b2.ok, "buy_worker failed")
+
+  for i, worker in ipairs({ b1.data, b2.data }) do
+    local p = minePairs[i]
+    local assign = engine.apply({
+      type = "assign_worker_to_target_cell",
+      workerId = worker.id,
+      levelId = "level_1",
+      targetCellId = p.targetId,
+      positionCellId = p.positionId,
+      assignmentMode = "until_completed",
+    })
+    assert(assign.ok, "assign failed: " .. (assign.error and assign.error.message or ""))
+  end
+
+  for _, w in ipairs(engine.read({ type = "get_workers" }).data.workers) do
+    assert_eq(w.state, "working", "expected both workers to be busy mining before the merge")
+  end
+
+  local merge = engine.apply({ type = "merge_workers", workerIds = { b1.data.id, b2.data.id } })
+  assert(
+    merge.ok,
+    "merge_workers should succeed even if both workers were busy mining: "
+      .. (merge.error and merge.error.message or "")
+  )
+  assert_eq(merge.data.level, 2, "merged worker level")
+  assert_eq(
+    merge.data.positionCellId,
+    minePairs[2].positionId,
+    "merged worker should take over the position of the worker it was dropped onto"
+  )
+  assert_eq(
+    merge.data.state,
+    "working",
+    "merged worker should resume mining in place instead of vanishing from the map"
+  )
+end)
+
+test("merge failure (mismatched levels) restores each worker's previous mining assignment", function()
+  engine.new_game("busy-merge-mismatch-seed")
+  local levelView = engine.read({
+    type = "get_level_view",
+    levelId = "level_1",
+    viewport = { x = 0, y = 0, width = 32, height = 32 },
+  }).data
+  local targetId, positionId = find_minable_pair(levelView)
+
+  local b1 = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  assert(b1.ok, "buy_worker failed")
+  local assign = engine.apply({
+    type = "assign_worker_to_target_cell",
+    workerId = b1.data.id,
+    levelId = "level_1",
+    targetCellId = targetId,
+    positionCellId = positionId,
+    assignmentMode = "until_completed",
+  })
+  assert(assign.ok, "assign failed: " .. (assign.error and assign.error.message or ""))
+
+  -- Bump this worker to level 2 directly via the export/load fixture path so
+  -- it mismatches the level-1 worker bought below.
+  local state = engine.export_state()
+  state.workers[b1.data.id].level = 2
+  engine.load_state(state)
+
+  local b2 = engine.apply({ type = "buy_worker", workerLevel = 1 })
+  assert(b2.ok, "buy_worker failed")
+
+  local merge = engine.apply({ type = "merge_workers", workerIds = { b1.data.id, b2.data.id } })
+  assert(not merge.ok, "merge should fail for mismatched levels")
+  assert_eq(merge.error.code, "worker_level_mismatch", "merge error code")
+
+  local w1
+  for _, w in ipairs(engine.read({ type = "get_workers" }).data.workers) do
+    if w.id == b1.data.id then
+      w1 = w
+    end
+  end
+  assert(w1, "worker should still exist after a failed merge")
+  assert_eq(w1.state, "working", "worker should resume mining after a failed merge")
+  assert_eq(w1.targetCellId, targetId, "worker should resume its previous target cell after a failed merge")
 end)
 
 test("create_next_level is rejected until the stairs area is reachable", function()

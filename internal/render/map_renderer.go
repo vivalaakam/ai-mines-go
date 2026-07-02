@@ -27,6 +27,15 @@ func worldToScreen(cellX, cellY float64, cam Camera) (float64, float64) {
 	return x, y
 }
 
+// ScreenToCell converts a screen-space point (e.g. cursor position) into the
+// world cell it falls in, inverting worldToScreen. Exported so the input
+// layer can hit-test drag/drop against the same cell grid this package draws.
+func ScreenToCell(screenX, screenY int, cam Camera) (float64, float64) {
+	cellX := math.Floor((float64(screenX)/cam.Zoom + cam.X) / TileSize)
+	cellY := math.Floor((float64(screenY)/cam.Zoom + cam.Y) / TileSize)
+	return cellX, cellY
+}
+
 func drawMap(screen *ebiten.Image, vm ViewModel) {
 	cells, _ := vm.LevelView["cells"].([]any)
 	size := float32(TileSize * vm.Camera.Zoom)
@@ -60,8 +69,7 @@ func drawMap(screen *ebiten.Image, vm ViewModel) {
 // workers to it. Reads the cursor directly (Draw-time input read, no mutation).
 func drawHoveredCell(screen *ebiten.Image, vm ViewModel, cells []any, size float32) {
 	mx, my := ebiten.CursorPosition()
-	cellX := math.Floor((float64(mx)/vm.Camera.Zoom + vm.Camera.X) / TileSize)
-	cellY := math.Floor((float64(my)/vm.Camera.Zoom + vm.Camera.Y) / TileSize)
+	cellX, cellY := ScreenToCell(mx, my, vm.Camera)
 
 	var hovered map[string]any
 	for _, raw := range cells {

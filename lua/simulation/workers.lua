@@ -105,6 +105,43 @@ function M.assign_worker(state, workerId, levelId, targetCellId, positionCellId,
   return worker, nil
 end
 
+--- Stands an idle worker on positionCellId without mining anything - used to
+--- keep a worker visible on the map (e.g. after a merge) when the spot it's
+--- taking over wasn't an active mining assignment.
+function M.place_idle_worker(state, worker, levelId, positionCellId)
+  local level = state.levels[levelId]
+  local cell = level and level.cells[positionCellId]
+  if cell and not cell.occupiedBy then
+    cell.occupiedBy = worker.id
+    worker.positionCellId = positionCellId
+    worker.assignedLevelId = levelId
+  end
+end
+
+--- Assigns a worker to mine targetCellId without a pre-chosen position: tries
+--- each adjacent cell in turn and uses the first one assign_worker accepts
+--- (open, reachable, not already occupied/claimed from that side).
+function M.assign_worker_to_nearest_cell(state, workerId, levelId, targetCellId, assignmentMode)
+  local level = state.levels[levelId]
+  if not level then
+    return nil, err("level_not_found", "Level not found: " .. tostring(levelId))
+  end
+  local targetCell = level.cells[targetCellId]
+  if not targetCell then
+    return nil, err("cell_not_found", "Target cell not found: " .. tostring(targetCellId))
+  end
+
+  local neighborOffsets = { { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } }
+  for _, off in ipairs(neighborOffsets) do
+    local positionCellId = (targetCell.x + off[1]) .. "," .. (targetCell.y + off[2])
+    local worker, assignErr = M.assign_worker(state, workerId, levelId, targetCellId, positionCellId, assignmentMode)
+    if not assignErr then
+      return worker, nil
+    end
+  end
+  return nil, err("no_open_adjacent_cell", "No free reachable cell adjacent to the target deposit")
+end
+
 function M.stop_worker(state, workerId)
   local worker = state.workers[workerId]
   if not worker then
@@ -131,6 +168,11 @@ function M.merge_workers(state, workerIds)
     return nil, err("worker_level_mismatch", "Workers must be the same level to merge")
   end
 
+  -- Detach before deleting so neither worker leaves a stale occupiedBy/
+  -- assignedWorkers reference behind (a no-op for already-idle workers with
+  -- no map placement).
+  M.detach_worker(state, w1)
+  M.detach_worker(state, w2)
   state.workers[w1.id] = nil
   state.workers[w2.id] = nil
   local newLevel = w1.level + 1

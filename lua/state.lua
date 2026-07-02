@@ -3,6 +3,7 @@ local defaultRules = require("config.rules")
 local reachabilityMod = require("simulation.reachability")
 local visibilityMod = require("simulation.visibility")
 local ordersMod = require("simulation.orders")
+local resourceConfig = require("config.resources")
 
 local M = {}
 M.SCHEMA_VERSION = 1
@@ -36,6 +37,19 @@ function M.new_game(seedPhrase)
     orders = {},
     nextIds = { worker = 1, storage = 1, order = 1, level = 1 },
   }
+
+  -- Every resource gets an uncapped storage from the start (no storage
+  -- purchases/limits - REQUIREMENTS.md storage model is intentionally
+  -- simplified here per product decision).
+  for _, resource in ipairs(resourceConfig.list) do
+    state.storages[resource.id] = {
+      id = resource.id,
+      resourceId = resource.id,
+      level = 1,
+      capacity = math.huge,
+      storedAmount = 0,
+    }
+  end
 
   local level = genLevel.new_level("level_1", 1, seedPhrase, M.GENERATOR_VERSION)
   state.levels[level.id] = level

@@ -1,6 +1,5 @@
 local tickMod = require("simulation.tick")
 local workersMod = require("simulation.workers")
-local storageMod = require("simulation.storage")
 local ordersMod = require("simulation.orders")
 local levelsMod = require("simulation.levels")
 
@@ -43,11 +42,73 @@ handlers["buy_worker"] = function(state, cmd)
   return ok({ data = worker })
 end
 
+-- Merging is usually triggered by dragging one worker onto another, and
+-- dragged workers are commonly still busy mining - stop each one first (idle
+-- is a merge precondition) and, if the merge itself is then rejected (e.g.
+-- mismatched levels), resend each worker back to whatever it was doing
+-- before the drag interrupted it, instead of leaving it stranded idle.
 handlers["merge_workers"] = function(state, cmd)
-  local worker, err = workersMod.merge_workers(state, cmd.workerIds)
+  local workerIds = cmd.workerIds or {}
+
+  -- The second id is "the one dropped onto" - capture its map placement
+  -- before anything is stopped/detached so the merged worker can take over
+  -- that exact spot afterwards (REQUIREMENTS UX: it should simply level up
+  -- in place instead of vanishing from the map).
+  local targetWorker = state.workers[workerIds[2]]
+  local targetPlacement = targetWorker
+    and {
+      levelId = targetWorker.assignedLevelId,
+      targetCellId = targetWorker.targetCellId,
+      positionCellId = targetWorker.positionCellId,
+      assignmentMode = targetWorker.assignmentMode,
+    }
+
+  local previousAssignments = {}
+  for _, workerId in ipairs(workerIds) do
+    local worker = state.workers[workerId]
+    if worker and worker.state ~= "idle" then
+      previousAssignments[workerId] = {
+        levelId = worker.assignedLevelId,
+        targetCellId = worker.targetCellId,
+        positionCellId = worker.positionCellId,
+        assignmentMode = worker.assignmentMode,
+      }
+      workersMod.stop_worker(state, workerId)
+    end
+  end
+
+  local worker, err = workersMod.merge_workers(state, workerIds)
   if err then
+    for workerId, prev in pairs(previousAssignments) do
+      if prev.levelId and prev.targetCellId and prev.positionCellId then
+        workersMod.assign_worker(
+          state,
+          workerId,
+          prev.levelId,
+          prev.targetCellId,
+          prev.positionCellId,
+          prev.assignmentMode
+        )
+      end
+    end
     return fail(err)
   end
+
+  if targetPlacement and targetPlacement.levelId and targetPlacement.positionCellId then
+    if targetPlacement.targetCellId then
+      workersMod.assign_worker(
+        state,
+        worker.id,
+        targetPlacement.levelId,
+        targetPlacement.targetCellId,
+        targetPlacement.positionCellId,
+        targetPlacement.assignmentMode
+      )
+    else
+      workersMod.place_idle_worker(state, worker, targetPlacement.levelId, targetPlacement.positionCellId)
+    end
+  end
+
   return ok({ data = worker })
 end
 
@@ -68,20 +129,24 @@ handlers["stop_worker"] = function(state, cmd)
   return ok({ data = worker })
 end
 
-handlers["buy_storage"] = function(state, cmd)
-  local storage, err = storageMod.buy_storage(state, cmd.resourceId)
+-- Drag-and-drop assignment target: only a deposit cell id is known (the drop
+-- point), not a specific adjacent position, so this stops the worker first
+-- (if it was busy elsewhere) and lets Lua pick the nearest free reachable
+-- neighbor cell to mine from.
+handlers["assign_worker_to_deposit"] = function(state, cmd)
+  local worker = state.workers[cmd.workerId]
+  if not worker then
+    return fail({ code = "worker_not_found", message = "Worker not found: " .. tostring(cmd.workerId), details = {} })
+  end
+  if worker.state ~= "idle" then
+    workersMod.stop_worker(state, cmd.workerId)
+  end
+  local assigned, err =
+    workersMod.assign_worker_to_nearest_cell(state, cmd.workerId, cmd.levelId, cmd.targetCellId, cmd.assignmentMode)
   if err then
     return fail(err)
   end
-  return ok({ data = storage })
-end
-
-handlers["upgrade_storage"] = function(state, cmd)
-  local storage, err = storageMod.upgrade_storage(state, cmd.storageId)
-  if err then
-    return fail(err)
-  end
-  return ok({ data = storage })
+  return ok({ data = assigned })
 end
 
 handlers["accept_order"] = function(state, cmd)

@@ -41,11 +41,12 @@ type Camera struct {
 // ViewModel bundles everything one frame's Draw needs, all sourced from
 // engine.read query results (map[string]any as decoded by luaengine).
 type ViewModel struct {
-	Camera        Camera
-	LevelView     map[string]any
-	PlayerSummary map[string]any
-	Workers       map[string]any
-	Resources     map[string]any
+	Camera           Camera
+	LevelView        map[string]any
+	PlayerSummary    map[string]any
+	Workers          map[string]any
+	Resources        map[string]any
+	DraggingWorkerID string
 }
 
 func Draw(screen *ebiten.Image, vm ViewModel) {

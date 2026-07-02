@@ -30,6 +30,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		log.Printf("get_level_view failed: %v", err)
 		return
 	}
+	g.lastLevelView = levelView
 	if bounds, ok := levelView["bounds"].(map[string]any); ok {
 		minX, _ := bounds["minX"].(float64)
 		minY, _ := bounds["minY"].(float64)
@@ -57,10 +58,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	}
 
 	render.Draw(screen, render.ViewModel{
-		Camera:        render.Camera{X: g.camera.X, Y: g.camera.Y, Zoom: g.camera.Zoom},
-		LevelView:     levelView,
-		PlayerSummary: playerSummary,
-		Workers:       workers,
-		Resources:     resources,
+		Camera:           render.Camera{X: g.camera.X, Y: g.camera.Y, Zoom: g.camera.Zoom},
+		LevelView:        levelView,
+		PlayerSummary:    playerSummary,
+		Workers:          workers,
+		Resources:        resources,
+		DraggingWorkerID: g.draggingWorkerID,
 	})
 }

@@ -32,6 +32,10 @@ func (g *Game) Update() error {
 		}
 	}
 
+	if err := g.handleWorkerDrag(); err != nil {
+		return err
+	}
+
 	if !g.accumulator.Advance() {
 		return nil
 	}
