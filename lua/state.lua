@@ -66,8 +66,23 @@ function M.export_state(state)
 end
 
 --- Restores an engine's state from a persistence-adapter-provided snapshot.
+--- ponytail: backfills uncapped storages for any resource missing one, so
+--- saves written before storages became unlimited-by-default still work.
 function M.load_state(state)
-  return deep_copy(state)
+  local copy = deep_copy(state)
+  copy.storages = copy.storages or {}
+  for _, resource in ipairs(resourceConfig.list) do
+    if not copy.storages[resource.id] then
+      copy.storages[resource.id] = {
+        id = resource.id,
+        resourceId = resource.id,
+        level = 1,
+        capacity = math.huge,
+        storedAmount = 0,
+      }
+    end
+  end
+  return copy
 end
 
 return M

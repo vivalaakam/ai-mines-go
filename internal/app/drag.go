@@ -11,12 +11,18 @@ import (
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
 
-// handleWorkerDrag lets the player drag a worker sprite: dropping it onto
-// another worker of the same level asks Lua to merge them (merge_workers
-// itself enforces the same-level/idle rules); dropping it onto a deposit
-// cell asks Lua to reassign it to the nearest free adjacent cell. Go only
-// picks the drag source/target from the cached view - Lua remains the only
-// place that validates and mutates game state.
+// clickMoveThreshold is how far (in screen pixels) the cursor may move
+// between mouse-down and mouse-up for the gesture to still count as a click
+// (click-to-select) rather than a drag (drag-and-drop).
+const clickMoveThreshold = 6
+
+// handleWorkerDrag handles both worker gestures. Dragging a worker sprite
+// onto another worker of the same level asks Lua to merge them immediately
+// (merge_workers itself enforces the same-level/idle rules); dragging it
+// onto a deposit cell asks Lua to reassign it there. A plain click instead
+// feeds handleWorkerClick's click-to-select "cut/paste" flow. Go only picks
+// the source/target from the cached view - Lua remains the only place that
+// validates and mutates game state.
 func (g *Game) handleWorkerDrag() error {
 	if g.lastLevelView == nil {
 		return nil
@@ -24,15 +30,26 @@ func (g *Game) handleWorkerDrag() error {
 
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		mx, my := ebiten.CursorPosition()
+		if g.pendingMerge != nil {
+			g.suppressNextClick = true
+			return g.resolvePendingMergeClick(mx, my)
+		}
 		if image.Pt(mx, my).In(render.HireWorkerButton) {
+			g.suppressNextClick = true
 			return nil
 		}
+		g.suppressNextClick = false
+		g.pressPos = image.Pt(mx, my)
 		cx, cy := render.ScreenToCell(mx, my, g.renderCamera())
 		g.draggingWorkerID = workerAtCell(g.lastLevelView, cx, cy)
 		return nil
 	}
 
-	if g.draggingWorkerID == "" || !inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+	if !inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+		return nil
+	}
+	if g.suppressNextClick {
+		g.suppressNextClick = false
 		return nil
 	}
 
@@ -41,6 +58,13 @@ func (g *Game) handleWorkerDrag() error {
 
 	mx, my := ebiten.CursorPosition()
 	cx, cy := render.ScreenToCell(mx, my, g.renderCamera())
+
+	if isNearby(g.pressPos, image.Pt(mx, my)) {
+		return g.handleWorkerClick(workerID, cx, cy)
+	}
+	if workerID == "" {
+		return nil
+	}
 
 	if targetWorkerID := workerAtCell(g.lastLevelView, cx, cy); targetWorkerID != "" && targetWorkerID != workerID {
 		result, err := g.engine.Apply("merge_workers", map[string]any{"workerIds": []any{workerID, targetWorkerID}})
@@ -68,6 +92,94 @@ func (g *Game) handleWorkerDrag() error {
 	}
 
 	return nil
+}
+
+// handleWorkerClick implements the click-to-select "cut/paste" gesture:
+// click a worker to select it, click a deposit cell to move the selected
+// worker there (equivalent to dragging it), click another worker of the
+// same level to open the merge-confirmation modal, or click the
+// already-selected worker again to deselect it.
+func (g *Game) handleWorkerClick(workerID string, cx, cy float64) error {
+	if workerID != "" {
+		switch g.selectedWorkerID {
+		case "":
+			g.selectedWorkerID = workerID
+		case workerID:
+			g.selectedWorkerID = ""
+		default:
+			selectedLevel, _ := workerLevelAt(g.lastLevelView, g.selectedWorkerID)
+			targetLevel, _ := workerLevelAt(g.lastLevelView, workerID)
+			if selectedLevel == targetLevel {
+				g.pendingMerge = &PendingMerge{WorkerA: g.selectedWorkerID, WorkerB: workerID, Level: int(selectedLevel)}
+			}
+			g.selectedWorkerID = ""
+		}
+		return nil
+	}
+
+	if g.selectedWorkerID == "" {
+		return nil
+	}
+
+	targetCellID, ok := depositCellAt(g.lastLevelView, cx, cy)
+	if !ok {
+		return nil
+	}
+
+	workerToMove := g.selectedWorkerID
+	g.selectedWorkerID = ""
+	result, err := g.engine.Apply("assign_worker_to_deposit", map[string]any{
+		"workerId":     workerToMove,
+		"levelId":      g.levelID,
+		"targetCellId": targetCellID,
+	})
+	if err != nil {
+		return err
+	}
+	if !result.OK {
+		log.Printf("assign_worker_to_deposit rejected: %+v", result.Error)
+	}
+	return nil
+}
+
+// resolvePendingMergeClick handles a click while the merge-confirmation
+// modal is open: clicking Yes merges the pending pair; clicking anywhere
+// else (No, or outside the modal) cancels without mutating state.
+func (g *Game) resolvePendingMergeClick(mx, my int) error {
+	merge := g.pendingMerge
+	g.pendingMerge = nil
+	if !(image.Pt(mx, my).In(render.MergeModalYesButton)) {
+		return nil
+	}
+	result, err := g.engine.Apply("merge_workers", map[string]any{"workerIds": []any{merge.WorkerA, merge.WorkerB}})
+	if err != nil {
+		return err
+	}
+	if !result.OK {
+		log.Printf("merge_workers rejected: %+v", result.Error)
+	}
+	return nil
+}
+
+func isNearby(a, b image.Point) bool {
+	dx := a.X - b.X
+	dy := a.Y - b.Y
+	return dx*dx+dy*dy <= clickMoveThreshold*clickMoveThreshold
+}
+
+func workerLevelAt(levelView map[string]any, workerID string) (float64, bool) {
+	workers, _ := levelView["workers"].([]any)
+	for _, raw := range workers {
+		worker, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if id, _ := worker["id"].(string); id == workerID {
+			level, _ := worker["level"].(float64)
+			return level, true
+		}
+	}
+	return 0, false
 }
 
 func (g *Game) renderCamera() render.Camera {

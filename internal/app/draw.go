@@ -57,6 +57,11 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 
+	var mergeConfirm *render.MergeConfirm
+	if g.pendingMerge != nil {
+		mergeConfirm = &render.MergeConfirm{Level: g.pendingMerge.Level}
+	}
+
 	render.Draw(screen, render.ViewModel{
 		Camera:           render.Camera{X: g.camera.X, Y: g.camera.Y, Zoom: g.camera.Zoom},
 		LevelView:        levelView,
@@ -64,5 +69,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		Workers:          workers,
 		Resources:        resources,
 		DraggingWorkerID: g.draggingWorkerID,
+		SelectedWorkerID: g.selectedWorkerID,
+		MergeConfirm:     mergeConfirm,
 	})
 }

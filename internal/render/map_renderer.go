@@ -102,6 +102,23 @@ func drawHoveredCell(screen *ebiten.Image, vm ViewModel, cells []any, size float
 		lines = append(lines, fmt.Sprintf("%s: %.0f", componentName(vm, component), remaining))
 	}
 
+	// A worker stands on the empty cell next to its deposit, not on the
+	// deposit itself, so this cell's own components are usually empty. Add a
+	// clearly separate block (its own coordinates, not merged into the lines
+	// above) showing what the occupying worker actually mines, so hovering
+	// the worker never looks like this empty cell holds resources itself.
+	if targetComponents, targetX, targetY, ok := workerTargetComponents(vm, cells, hovered); ok {
+		lines = append(lines, fmt.Sprintf("mining (%.0f,%.0f):", targetX, targetY))
+		for _, raw := range targetComponents {
+			component, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			remaining, _ := component["remainingAmount"].(float64)
+			lines = append(lines, fmt.Sprintf("  %s: %.0f", componentName(vm, component), remaining))
+		}
+	}
+
 	tx, ty := mx+16, my+8
 	maxLen := 0
 	for _, line := range lines {
@@ -117,6 +134,54 @@ func drawHoveredCell(screen *ebiten.Image, vm ViewModel, cells []any, size float
 		ebitenutil.DebugPrintAt(screen, line, tx, ty)
 		ty += 14
 	}
+}
+
+// workerTargetComponents finds the components (and coordinates) of the
+// deposit cell mined by the worker occupying `hovered` (if any and if it's
+// still actively mining - a worker just gone idle has no targetCellId), by
+// following that worker's targetCellId into the same viewport cell list.
+func workerTargetComponents(vm ViewModel, cells []any, hovered map[string]any) (components []any, targetX, targetY float64, ok bool) {
+	occupiedBy, _ := hovered["occupiedBy"].(string)
+	if occupiedBy == "" {
+		return nil, 0, 0, false
+	}
+
+	workers, _ := vm.LevelView["workers"].([]any)
+	var targetCellID string
+	for _, raw := range workers {
+		worker, wok := raw.(map[string]any)
+		if !wok {
+			continue
+		}
+		if id, _ := worker["id"].(string); id == occupiedBy {
+			targetCellID, _ = worker["targetCellId"].(string)
+			break
+		}
+	}
+	if targetCellID == "" {
+		return nil, 0, 0, false
+	}
+	tx, ty, parsed := ParseCellID(targetCellID)
+	if !parsed {
+		return nil, 0, 0, false
+	}
+
+	for _, raw := range cells {
+		cell, cok := raw.(map[string]any)
+		if !cok {
+			continue
+		}
+		cx, _ := cell["x"].(float64)
+		cy, _ := cell["y"].(float64)
+		if cx == tx && cy == ty {
+			cellComponents, _ := cell["components"].([]any)
+			if len(cellComponents) == 0 {
+				return nil, 0, 0, false
+			}
+			return cellComponents, tx, ty, true
+		}
+	}
+	return nil, 0, 0, false
 }
 
 // componentName labels a deposit component for the tooltip: "rock" components

@@ -1,14 +1,46 @@
 local storageMod = require("simulation.storage")
 local cellsMod = require("generation.cells")
+local workersMod = require("simulation.workers")
 
 local M = {}
+
+local neighborOffsets = { { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } }
+
+--- After a worker's deposit depletes, keep it working by assigning it to a
+--- still-workable deposit on one of the four cells adjacent to where it
+--- already stands, without moving it. Leaves the worker idle if none of its
+--- neighbors have anything left to mine.
+local function try_auto_continue(state, level, worker)
+  local position = worker.positionCellId and level.cells[worker.positionCellId]
+  if not position then
+    return
+  end
+  for _, off in ipairs(neighborOffsets) do
+    local targetCellId = (position.x + off[1]) .. "," .. (position.y + off[2])
+    local targetCell = level.cells[targetCellId]
+    if targetCell and targetCell.kind == "deposit" and not cellsMod.is_depleted(targetCell) then
+      local assigned =
+        workersMod.assign_worker(state, worker.id, level.id, targetCellId, worker.positionCellId, worker.assignmentMode)
+      if assigned then
+        return
+      end
+    end
+  end
+end
 
 --- Processes one tick of mining for every actively-worked cell in a level.
 --- ponytail: only iterates level.activeMiningCells (maintained by workers.lua)
 --- instead of scanning every generated cell every tick.
 function M.process_tick(state, level)
   local events = {}
+  -- Snapshot the keys before iterating: try_auto_continue below can add a
+  -- newly-assigned cell to level.activeMiningCells mid-loop, and mutating a
+  -- table while pairs() is iterating it is undefined behavior in Lua.
+  local cellKeys = {}
   for cellKey in pairs(level.activeMiningCells) do
+    cellKeys[#cellKeys + 1] = cellKey
+  end
+  for _, cellKey in ipairs(cellKeys) do
     local cell = level.cells[cellKey]
     if not cell or cell.kind ~= "deposit" or next(cell.assignedWorkers) == nil then
       level.activeMiningCells[cellKey] = nil
@@ -64,15 +96,25 @@ function M.process_tick(state, level)
       if cellsMod.is_depleted(cell) then
         cell.kind = "empty"
         cell.components = {}
+        local vacatedWorkerIds = {}
         for side, workerId in pairs(cell.assignedWorkers) do
           local worker = state.workers[workerId]
           if worker then
             worker.state = "idle"
+            worker.targetCellId = nil
+            vacatedWorkerIds[#vacatedWorkerIds + 1] = workerId
           end
           cell.assignedWorkers[side] = nil
         end
         level.activeMiningCells[cellKey] = nil
         events[#events + 1] = { type = "cell_depleted", cellId = cellKey, levelId = level.id }
+
+        for _, workerId in ipairs(vacatedWorkerIds) do
+          local worker = state.workers[workerId]
+          if worker and worker.state == "idle" then
+            try_auto_continue(state, level, worker)
+          end
+        end
       end
     end
   end
