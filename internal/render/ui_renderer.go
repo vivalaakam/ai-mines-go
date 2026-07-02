@@ -28,9 +28,9 @@ func drawUI(screen *ebiten.Image, vm ViewModel) {
 	drawResourcesPanel(screen, vm)
 }
 
-// drawResourcesPanel lists every unlocked resource's stored/capacity totals
-// (REQUIREMENTS.md storage model), anchored to the top-right so it never
-// overlaps the worker roster on the left.
+// drawResourcesPanel lists every unlocked resource's stored amount,
+// anchored to the top-right so it never overlaps the worker roster on
+// the left. Storage is uncapped, so no capacity is shown.
 func drawResourcesPanel(screen *ebiten.Image, vm ViewModel) {
 	if vm.Resources == nil {
 		return
@@ -50,12 +50,11 @@ func drawResourcesPanel(screen *ebiten.Image, vm ViewModel) {
 			continue
 		}
 		stored, _ := resource["totalStored"].(float64)
-		capacity, _ := resource["totalCapacity"].(float64)
-		if stored == 0 && capacity == 0 {
+		if stored == 0 {
 			continue
 		}
 		name, _ := resource["name"].(string)
-		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s: %.0f/%.0f", name, stored, capacity), x, y)
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("%s: %.0f", name, stored), x, y)
 		y += 14
 	}
 }
