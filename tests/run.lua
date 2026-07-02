@@ -222,6 +222,75 @@ test("worker mines a deposit: rock never enters storage, resource does, cell bec
   end
 end)
 
+test("depleting a deposit auto-continues the worker onto an adjacent deposit", function()
+  local miningMod = require("simulation.mining")
+  local resourceConfig = require("config.resources")
+
+  local storages = {}
+  for _, resource in ipairs(resourceConfig.list) do
+    storages[resource.id] = { id = resource.id, resourceId = resource.id, level = 1, capacity = math.huge, storedAmount = 0 }
+  end
+
+  -- Worker stands at (0,0); deposit A is one tick from depleting to its west,
+  -- deposit B (untouched) is to its north.
+  local level = {
+    id = "lvl",
+    activeMiningCells = { ["-1,0"] = true },
+    cells = {
+      ["0,0"] = { x = 0, y = 0, kind = "empty", accessibility = "reachable", occupiedBy = "w1", assignedWorkers = {} },
+      ["-1,0"] = {
+        x = -1,
+        y = 0,
+        kind = "deposit",
+        assignedWorkers = { east = "w1" },
+        components = { { type = "rock", resourceId = nil, ratio = 1, initialAmount = 1, remainingAmount = 1 } },
+      },
+      ["0,-1"] = {
+        x = 0,
+        y = -1,
+        kind = "deposit",
+        assignedWorkers = {},
+        components = {
+          { type = "rock", resourceId = nil, ratio = 0.5, initialAmount = 50, remainingAmount = 50 },
+          { type = "resource", resourceId = "stone", ratio = 0.5, initialAmount = 50, remainingAmount = 50 },
+        },
+      },
+    },
+  }
+  local state = {
+    storages = storages,
+    levels = { lvl = level },
+    workers = {
+      w1 = {
+        id = "w1",
+        level = 1,
+        speed = 1000,
+        state = "working",
+        assignedLevelId = "lvl",
+        targetCellId = "-1,0",
+        positionCellId = "0,0",
+        assignmentMode = "until_completed",
+      },
+    },
+  }
+
+  local events = miningMod.process_tick(state, level)
+  local depleted = false
+  for _, e in ipairs(events) do
+    if e.type == "cell_depleted" and e.cellId == "-1,0" then
+      depleted = true
+    end
+  end
+  assert(depleted, "expected deposit A to deplete in a single tick")
+  assert_eq(level.cells["-1,0"].kind, "empty", "depleted deposit kind")
+
+  local worker = state.workers.w1
+  assert_eq(worker.state, "working", "worker should auto-continue instead of going idle")
+  assert_eq(worker.targetCellId, "0,-1", "worker should have been reassigned to the adjacent deposit")
+  assert_eq(level.cells["0,-1"].assignedWorkers.south, "w1", "worker should be mining deposit B from the south")
+  assert(level.activeMiningCells["0,-1"], "deposit B should now be an active mining cell")
+end)
+
 test("storages exist for every resource from the start and never fill up", function()
   engine.new_game("full-storage-seed")
   local storageState = engine.read({ type = "get_storage_state" }).data

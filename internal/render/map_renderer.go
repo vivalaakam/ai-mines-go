@@ -91,22 +91,8 @@ func drawHoveredCell(screen *ebiten.Image, vm ViewModel, cells []any, size float
 	x, y := worldToScreen(cellX, cellY, vm.Camera)
 	vector.StrokeRect(screen, float32(x), float32(y), size-1, size-1, 2, color.RGBA{255, 230, 90, 255}, false)
 
-	label := fmt.Sprintf("(%.0f,%.0f) %v", cellX, cellY, hovered["kind"])
+	lines := []string{fmt.Sprintf("(%.0f,%.0f) %v", cellX, cellY, hovered["kind"])}
 	components, _ := hovered["components"].([]any)
-
-	// A worker stands on the empty cell next to its deposit, not on the
-	// deposit itself, so this cell's own components are empty - show what
-	// the worker occupying it is actually mining instead, so hovering the
-	// worker (or guessing among several adjacent deposits) still lists the
-	// right resource.
-	if len(components) == 0 {
-		if targetComponents, targetKind, ok := workerTargetComponents(vm, cells, hovered); ok {
-			components = targetComponents
-			label = fmt.Sprintf("%s (mining %s)", label, targetKind)
-		}
-	}
-
-	lines := []string{label}
 	for _, raw := range components {
 		component, ok := raw.(map[string]any)
 		if !ok {
@@ -114,6 +100,23 @@ func drawHoveredCell(screen *ebiten.Image, vm ViewModel, cells []any, size float
 		}
 		remaining, _ := component["remainingAmount"].(float64)
 		lines = append(lines, fmt.Sprintf("%s: %.0f", componentName(vm, component), remaining))
+	}
+
+	// A worker stands on the empty cell next to its deposit, not on the
+	// deposit itself, so this cell's own components are usually empty. Add a
+	// clearly separate block (its own coordinates, not merged into the lines
+	// above) showing what the occupying worker actually mines, so hovering
+	// the worker never looks like this empty cell holds resources itself.
+	if targetComponents, targetX, targetY, ok := workerTargetComponents(vm, cells, hovered); ok {
+		lines = append(lines, fmt.Sprintf("mining (%.0f,%.0f):", targetX, targetY))
+		for _, raw := range targetComponents {
+			component, ok := raw.(map[string]any)
+			if !ok {
+				continue
+			}
+			remaining, _ := component["remainingAmount"].(float64)
+			lines = append(lines, fmt.Sprintf("  %s: %.0f", componentName(vm, component), remaining))
+		}
 	}
 
 	tx, ty := mx+16, my+8
@@ -133,20 +136,21 @@ func drawHoveredCell(screen *ebiten.Image, vm ViewModel, cells []any, size float
 	}
 }
 
-// workerTargetComponents finds the components of the deposit cell mined by
-// the worker occupying `hovered` (if any), by following that worker's
-// targetCellId into the same viewport cell list.
-func workerTargetComponents(vm ViewModel, cells []any, hovered map[string]any) ([]any, string, bool) {
+// workerTargetComponents finds the components (and coordinates) of the
+// deposit cell mined by the worker occupying `hovered` (if any and if it's
+// still actively mining - a worker just gone idle has no targetCellId), by
+// following that worker's targetCellId into the same viewport cell list.
+func workerTargetComponents(vm ViewModel, cells []any, hovered map[string]any) (components []any, targetX, targetY float64, ok bool) {
 	occupiedBy, _ := hovered["occupiedBy"].(string)
 	if occupiedBy == "" {
-		return nil, "", false
+		return nil, 0, 0, false
 	}
 
 	workers, _ := vm.LevelView["workers"].([]any)
 	var targetCellID string
 	for _, raw := range workers {
-		worker, ok := raw.(map[string]any)
-		if !ok {
+		worker, wok := raw.(map[string]any)
+		if !wok {
 			continue
 		}
 		if id, _ := worker["id"].(string); id == occupiedBy {
@@ -155,27 +159,29 @@ func workerTargetComponents(vm ViewModel, cells []any, hovered map[string]any) (
 		}
 	}
 	if targetCellID == "" {
-		return nil, "", false
+		return nil, 0, 0, false
 	}
-	tx, ty, ok := ParseCellID(targetCellID)
-	if !ok {
-		return nil, "", false
+	tx, ty, parsed := ParseCellID(targetCellID)
+	if !parsed {
+		return nil, 0, 0, false
 	}
 
 	for _, raw := range cells {
-		cell, ok := raw.(map[string]any)
-		if !ok {
+		cell, cok := raw.(map[string]any)
+		if !cok {
 			continue
 		}
 		cx, _ := cell["x"].(float64)
 		cy, _ := cell["y"].(float64)
 		if cx == tx && cy == ty {
-			components, _ := cell["components"].([]any)
-			kind, _ := cell["kind"].(string)
-			return components, kind, true
+			cellComponents, _ := cell["components"].([]any)
+			if len(cellComponents) == 0 {
+				return nil, 0, 0, false
+			}
+			return cellComponents, tx, ty, true
 		}
 	}
-	return nil, "", false
+	return nil, 0, 0, false
 }
 
 // componentName labels a deposit component for the tooltip: "rock" components
