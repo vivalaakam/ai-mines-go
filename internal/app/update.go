@@ -21,8 +21,17 @@ func (g *Game) Update() error {
 	g.syncGamepads()
 	input := g.pollInput()
 	g.camera.Move(input.CameraDX, input.CameraDY)
-	if input.ZoomDelta != 0 {
-		g.camera.SetZoom(g.camera.Zoom + input.ZoomDelta)
+	zoomDelta := input.ZoomDelta
+	if input.Gamepad.present && g.focus == focusMap {
+		if input.Gamepad.dpadUp {
+			zoomDelta += dpadZoomSpeed
+		}
+		if input.Gamepad.dpadDown {
+			zoomDelta -= dpadZoomSpeed
+		}
+	}
+	if zoomDelta != 0 {
+		g.camera.SetZoom(g.camera.Zoom + zoomDelta)
 	}
 	if g.mapBounds != nil {
 		g.camera.Clamp(
@@ -43,6 +52,8 @@ func (g *Game) Update() error {
 	if err := g.handleWorkerDrag(); err != nil {
 		return err
 	}
+
+	g.handleGamepad(input.Gamepad)
 
 	if !g.accumulator.Advance() {
 		return nil

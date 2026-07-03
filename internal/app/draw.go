@@ -1,12 +1,13 @@
 package app
 
 import (
-	"image"
+	"fmt"
 	"image/color"
 	"log"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/vivalaakam/ai-mines-go/internal/render"
@@ -90,17 +91,55 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		MergeConfirm:     mergeConfirm,
 	})
 
-	if g.pointer.gamepad {
-		drawCursor(screen, g.pointer.pos)
+	g.drawGamepadOverlays(screen)
+}
+
+// drawGamepadOverlays draws the gamepad-only UI: the map cell-cursor, the
+// orders-panel selection highlight, and the hire-select modal. Each only
+// renders in its focus mode.
+func (g *Game) drawGamepadOverlays(screen *ebiten.Image) {
+	hl := color.RGBA{255, 230, 0, 255}
+
+	if g.focus == focusMap {
+		if x, y, size, ok := g.gamepadCursorScreenPos(); ok {
+			vector.StrokeRect(screen, x, y, size, size, 2, hl, false)
+		}
+	}
+
+	if g.focus == focusOrders && g.orderSel >= 0 && g.orderSel < len(g.lastAvailableOrderIDs) {
+		r := render.AvailableOrderRow(g.orderSel)
+		vector.StrokeRect(screen, float32(r.Min.X)-2, float32(r.Min.Y)-2, float32(r.Dx())+4, float32(r.Dy())+4, 2, hl, false)
+	}
+
+	if g.focus == focusHire {
+		g.drawHirePanel(screen)
 	}
 }
 
-// drawCursor renders a small crosshair for the gamepad-driven virtual cursor
-// (there is no OS cursor while the pad is active).
-func drawCursor(screen *ebiten.Image, p image.Point) {
-	x, y := float32(p.X), float32(p.Y)
-	vector.StrokeLine(screen, x-10, y, x+10, y, 2, color.White, false)
-	vector.StrokeLine(screen, x, y-10, x, y+10, 2, color.White, false)
+// drawHirePanel renders the hire-worker selection modal: a list of purchasable
+// levels with costs and a highlight on the selected row.
+func (g *Game) drawHirePanel(screen *ebiten.Image) {
+	const w = 280
+	rowH := 18
+	h := 36 + rowH*max(1, len(g.hireLevels)) + 16
+	x := (render.ScreenWidth - w) / 2
+	y := (render.ScreenHeight - h) / 2
+
+	vector.FillRect(screen, float32(x), float32(y), float32(w), float32(h), color.RGBA{30, 30, 30, 230}, false)
+	vector.StrokeRect(screen, float32(x), float32(y), float32(w), float32(h), 2, color.RGBA{255, 255, 255, 255}, false)
+	ebitenutil.DebugPrintAt(screen, "Hire worker  (A=buy, B=close)", x+8, y+8)
+
+	if len(g.hireLevels) == 0 {
+		ebitenutil.DebugPrintAt(screen, "(none purchasable)", x+10, y+30)
+		return
+	}
+	for i, lv := range g.hireLevels {
+		ry := y + 30 + i*rowH
+		if i == g.hireSel {
+			vector.FillRect(screen, float32(x+4), float32(ry-1), float32(w-8), float32(rowH), color.RGBA{80, 80, 40, 255}, false)
+		}
+		ebitenutil.DebugPrintAt(screen, fmt.Sprintf("Lv%.0f   $%.0f", lv.Level, lv.Cost), x+12, ry)
+	}
 }
 
 // refreshStateViews re-fetches the 5 camera-independent view-models in one

@@ -5,8 +5,6 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
-
-	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
 
 // InputState is a snapshot of this frame's raw input, decoupled from ebiten so
@@ -14,28 +12,35 @@ import (
 type InputState struct {
 	CameraDX, CameraDY float64
 	ZoomDelta          float64
+	Gamepad            gamepadInput
 }
 
-// pointerState is the unified mouse/gamepad pointer for one frame. drag.go and
-// update.go read it instead of ebiten.CursorPosition()+mouse buttons directly,
-// so a gamepad-driven cursor (left stick to move, A to click) feeds the exact
-// same hit-testing the mouse does.
+// pointerState is the mouse pointer for one frame. drag.go reads it instead of
+// ebiten.CursorPosition()+mouse buttons directly. (The gamepad uses a separate
+// cell-cursor + focus state machine in gamepad.go, not this pointer.)
 type pointerState struct {
 	pos          image.Point
 	justPressed  bool
 	justReleased bool
-	gamepad      bool // true when driven by the gamepad this frame (draw a cursor)
+}
+
+// gamepadInput is one frame of raw state from the first connected
+// standard-layout gamepad. Sticks are deadzoned floats in [-1,1]; buttons are
+// just-pressed edges except dpadUp/dpadDown which are held (so zoom/list repeat
+// can be driven off them with a cooldown).
+type gamepadInput struct {
+	present                      bool
+	leftX, leftY, rightX, rightY float64
+	a, b, selectBtn, r2          bool
+	dpadUp, dpadDown             bool
 }
 
 const (
-	cameraPanSpeed = 6.0
-	// stickDeadzone ignores centered-stick drift. stickPanSpeed scales a full
-	// right-stick deflection into per-frame camera pixels. cursorSpeed does the
-	// same for the left-stick virtual cursor. ponytail: calibration knobs.
-	stickDeadzone = 0.25
-	stickPanSpeed = cameraPanSpeed * 5
-	cursorSpeed   = 10.0
-	dpadZoomSpeed = 0.02
+	cameraPanSpeed    = 6.0
+	stickDeadzone     = 0.25
+	stickPanSpeed     = cameraPanSpeed * 5
+	dpadZoomSpeed     = 0.02
+	stickActThreshold = 0.5 // deflection above which a stick "acts" (move cursor / navigate list)
 )
 
 // syncGamepads tracks connected gamepad IDs, mirroring the ebiten gamepad
@@ -56,7 +61,7 @@ func (g *Game) syncGamepads() {
 }
 
 // pollInput collects keyboard/mouse and gamepad input into one frame snapshot
-// and resolves the unified pointer (g.pointer) for this frame.
+// and resolves the mouse pointer (g.pointer) for this frame.
 func (g *Game) pollInput() InputState {
 	var s InputState
 	if ebiten.IsKeyPressed(ebiten.KeyW) || ebiten.IsKeyPressed(ebiten.KeyUp) {
@@ -74,80 +79,46 @@ func (g *Game) pollInput() InputState {
 	_, wheelY := ebiten.Wheel()
 	s.ZoomDelta = wheelY * 0.1
 
-	aPressed, aReleased := g.pollGamepad(&s)
-	g.syncPointer(aPressed, aReleased)
+	g.pollGamepad(&s)
+	g.syncPointer()
 	return s
 }
 
-// pollGamepad reads the first connected standard-layout gamepad:
-//   - right stick → camera pan
-//   - left stick → virtual cursor
-//   - D-pad up/down → zoom
-//   - A button (RightBottom) → click edges (resolved into g.pointer by syncPointer)
-//
-// Returns the A button just-pressed/just-released edges for this frame.
-func (g *Game) pollGamepad(s *InputState) (aPressed, aReleased bool) {
+// pollGamepad reads the first connected standard-layout gamepad into s.Gamepad
+// and adds the right stick to camera pan (pan works in any focus mode so the
+// player can look around while navigating menus).
+func (g *Game) pollGamepad(s *InputState) {
+	var gp gamepadInput
 	for id := range g.gamepadIDs {
 		if !ebiten.IsStandardGamepadLayoutAvailable(id) {
 			continue
 		}
-		rx := standardAxis(id, ebiten.StandardGamepadAxisRightStickHorizontal)
-		ry := standardAxis(id, ebiten.StandardGamepadAxisRightStickVertical)
-		s.CameraDX += rx * stickPanSpeed
-		s.CameraDY += ry * stickPanSpeed
+		gp.present = true
+		gp.leftX = standardAxis(id, ebiten.StandardGamepadAxisLeftStickHorizontal)
+		gp.leftY = standardAxis(id, ebiten.StandardGamepadAxisLeftStickVertical)
+		gp.rightX = standardAxis(id, ebiten.StandardGamepadAxisRightStickHorizontal)
+		gp.rightY = standardAxis(id, ebiten.StandardGamepadAxisRightStickVertical)
+		s.CameraDX += gp.rightX * stickPanSpeed
+		s.CameraDY += gp.rightY * stickPanSpeed
 
-		lx := standardAxis(id, ebiten.StandardGamepadAxisLeftStickHorizontal)
-		ly := standardAxis(id, ebiten.StandardGamepadAxisLeftStickVertical)
-		if lx != 0 || ly != 0 {
-			if !g.cursorActive {
-				g.cursor = image.Pt(render.ScreenWidth/2, render.ScreenHeight/2)
-				g.cursorActive = true
-			}
-			g.cursor.X += int(lx * cursorSpeed)
-			g.cursor.Y += int(ly * cursorSpeed)
-			clampCursor(&g.cursor)
-		}
-
-		if ebiten.IsStandardGamepadButtonPressed(id, ebiten.StandardGamepadButtonLeftTop) {
-			s.ZoomDelta += dpadZoomSpeed
-		}
-		if ebiten.IsStandardGamepadButtonPressed(id, ebiten.StandardGamepadButtonLeftBottom) {
-			s.ZoomDelta -= dpadZoomSpeed
-		}
-
-		aPressed = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightBottom)
-		aReleased = inpututil.IsStandardGamepadButtonJustReleased(id, ebiten.StandardGamepadButtonRightBottom)
+		gp.dpadUp = ebiten.IsStandardGamepadButtonPressed(id, ebiten.StandardGamepadButtonLeftTop)
+		gp.dpadDown = ebiten.IsStandardGamepadButtonPressed(id, ebiten.StandardGamepadButtonLeftBottom)
+		gp.a = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightBottom)
+		gp.b = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightRight)
+		gp.selectBtn = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonCenterLeft)
+		gp.r2 = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonFrontBottomRight)
 		break
 	}
-	return aPressed, aReleased
+	s.Gamepad = gp
 }
 
-// syncPointer resolves the frame's unified pointer from mouse + gamepad A edge.
-// The gamepad cursor stays active until the mouse moves or clicks, so the two
-// don't fight: whichever the player last touched wins.
-func (g *Game) syncPointer(aPressed, aReleased bool) {
+// syncPointer snapshots the mouse into g.pointer for drag.go/update.go.
+func (g *Game) syncPointer() {
 	mx, my := ebiten.CursorPosition()
-	mousePos := image.Pt(mx, my)
-	mousePressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
-	mouseReleased := inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft)
-
-	if mousePos != g.lastMousePos || mousePressed {
-		g.cursorActive = false
-	}
-	if aPressed {
-		g.cursorActive = true
-	}
-
-	pos := mousePos
-	if g.cursorActive {
-		pos = g.cursor
-	}
-	g.lastMousePos = mousePos
 	g.pointer = pointerState{
-		pos:          pos,
-		justPressed:  mousePressed || aPressed,
-		justReleased: mouseReleased || (aReleased && g.cursorActive),
-		gamepad:      g.cursorActive,
+		pos:          image.Pt(mx, my),
+		justPressed:  inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
+		justReleased: inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft),
 	}
 }
 
@@ -158,19 +129,4 @@ func standardAxis(id ebiten.GamepadID, axis ebiten.StandardGamepadAxis) float64 
 		return 0
 	}
 	return v
-}
-
-func clampCursor(p *image.Point) {
-	if p.X < 0 {
-		p.X = 0
-	}
-	if p.X > render.ScreenWidth {
-		p.X = render.ScreenWidth
-	}
-	if p.Y < 0 {
-		p.Y = 0
-	}
-	if p.Y > render.ScreenHeight {
-		p.Y = render.ScreenHeight
-	}
 }

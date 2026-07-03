@@ -80,15 +80,45 @@ type Game struct {
 	gamepadIDs    map[ebiten.GamepadID]struct{}
 	gamepadIDsBuf []ebiten.GamepadID
 
-	// cursor is the gamepad-driven virtual cursor position; cursorActive is
-	// true while the player is using the pad (left stick) rather than the
-	// mouse. pointer is this frame's unified mouse/gamepad pointer consumed
-	// by update.go/drag.go; lastMousePos detects mouse movement to hand
-	// control back from the gamepad to the mouse.
-	cursor       image.Point
-	cursorActive bool
-	pointer      pointerState
-	lastMousePos image.Point
+	// pointer is this frame's mouse pointer, consumed by update.go/drag.go
+	// for click interactions. The gamepad uses a separate cell-cursor +
+	// focus state machine (see gamepad.go), not this pointer.
+	pointer pointerState
+
+	// Gamepad focus/cursor state (gamepad.go):
+	//   focus         - which surface the pad drives: map, orders, or hire
+	//   cursorCell    - world cell under the map cell-cursor
+	//   cursorInit    - cursorCell has been placed (waits for mapBounds)
+	//   cursorCD      - frames until the stick can move the cursor another cell
+	//   orderSel      - highlighted available-order index (orders focus)
+	//   hireSel       - highlighted purchasable-worker index (hire focus)
+	//   hireLevels    - cached purchasable levels while the hire panel is open
+	//   listCD        - frames until a held up/down advances the list again
+	focus       focusMode
+	cursorCellX float64
+	cursorCellY float64
+	cursorInit  bool
+	cursorCD    int
+	orderSel    int
+	hireSel     int
+	hireLevels  []hireLevel
+	listCD      int
+}
+
+// focusMode is which surface the gamepad currently drives. Mouse input is
+// independent and always active regardless of focus.
+type focusMode int
+
+const (
+	focusMap focusMode = iota
+	focusOrders
+	focusHire
+)
+
+// hireLevel is one buyable worker tier shown in the hire-select panel.
+type hireLevel struct {
+	Level float64
+	Cost  float64
 }
 
 // PendingMerge holds a same-level worker pair awaiting the player's yes/no

@@ -119,6 +119,15 @@ func AvailableOrderDeclineButton(i int) image.Rectangle {
 	return AvailableOrderAcceptButton(i).Add(image.Pt(orderButtonW+8, 0))
 }
 
+// AvailableOrderRow is the full screen-space row (label + buttons) of the i-th
+// drawn available order. Exported so internal/app can draw a gamepad
+// selection highlight over the whole row, not just the buttons.
+func AvailableOrderRow(i int) image.Rectangle {
+	x := sidebarX0 + sidebarPadding
+	y := availableOrdersOriginY + 16 + i*availableOrderBlockH
+	return image.Rect(x, y, x+SidebarWidth-2*sidebarPadding, y+availableOrderBlockH)
+}
+
 // requirementsLine renders one order's requirements as e.g.
 // "stone 12/40 @$2, coal 0/15 @$5" (delivered/required at per-unit price).
 func requirementsLine(order map[string]any) string {
