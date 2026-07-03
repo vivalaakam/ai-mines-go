@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/inpututil"
 
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
 	"github.com/vivalaakam/ai-mines-go/internal/render"
@@ -22,6 +23,26 @@ const orderEventLogCap = 20
 func (g *Game) Update() error {
 	g.syncGamepads()
 	input := g.pollInput()
+
+	// Pause menu takes over input: while the exit-confirmation dialog or the
+	// pause menu is open, no camera/worker/tick processing happens — the tick
+	// accumulator is not advanced, so the simulation freezes (REQUIREMENTS.md
+	// §6: time advances only via tick applies, which we skip here).
+	if g.confirmExit {
+		return g.handleConfirmExitInput(input)
+	}
+	if g.paused {
+		g.handlePauseInput(input)
+		return nil
+	}
+	// Open the pause menu via ESC, gamepad Start, or the top-right corner
+	// button.
+	if inpututil.IsKeyJustPressed(ebiten.KeyEscape) || input.Gamepad.startBtn ||
+		(g.pointer.justPressed && g.pointer.pos.In(render.PauseButton)) {
+		g.openPause()
+		return nil
+	}
+
 	g.camera.Move(input.CameraDX, input.CameraDY)
 	zoomDelta := input.ZoomDelta
 	if input.Gamepad.present && g.focus == focusMap {

@@ -34,11 +34,11 @@ type pointerState struct {
 // just-pressed edge so that, while a pad is connected, a mouse click acts on
 // the highlighted tile through the same mapCursorAction path as A.
 type gamepadInput struct {
-	present                      bool
-	leftX, leftY, rightX, rightY float64
-	a, b, selectBtn, r2          bool
-	mouseClick                   bool
-	dpadUp, dpadDown             bool
+	present                       bool
+	leftX, leftY, rightX, rightY  float64
+	a, b, selectBtn, startBtn, r2 bool
+	mouseClick                    bool
+	dpadUp, dpadDown              bool
 }
 
 const (
@@ -115,6 +115,7 @@ func (g *Game) pollGamepad(s *InputState) {
 		gp.a = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightBottom)
 		gp.b = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightRight)
 		gp.selectBtn = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonCenterLeft)
+		gp.startBtn = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonCenterRight)
 		gp.r2 = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonFrontBottomRight)
 		break
 	}
