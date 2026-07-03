@@ -117,6 +117,16 @@ type Game struct {
 	hireSel    int
 	hireLevels []hireLevel
 	listCD     int
+
+	// Pause menu state (pause.go). paused stops the tick accumulator from
+	// advancing (the simulation freezes); confirmExit is the nested "save and
+	// quit?" dialog. pauseSel/confirmSel are the gamepad-highlighted button
+	// indices (0=Continue/Yes, 1=Exit/No). Pause is app-layer UI state only -
+	// it never reaches Lua.
+	paused      bool
+	confirmExit bool
+	pauseSel    int
+	confirmSel  int
 }
 
 // focusMode is which surface the gamepad currently drives. Mouse input is

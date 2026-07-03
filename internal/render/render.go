@@ -54,6 +54,16 @@ type MergeConfirm struct {
 	Level int
 }
 
+// PauseMenu describes the pause overlay (Continue / Exit) plus the nested
+// exit-confirmation dialog. Pause is an app-layer UI state, not gameplay
+// state, so this carries only presentation data; nil means no overlay.
+type PauseMenu struct {
+	ConfirmExit bool // exit-confirmation dialog open over the pause menu
+	Gamepad     bool // a gamepad is driving the menu → draw selection highlights
+	PauseSel    int  // highlighted pause button: 0=Continue, 1=Exit
+	ConfirmSel  int  // highlighted confirm button: 0=Yes, 1=No
+}
+
 // ViewModel bundles everything one frame's Draw needs, all sourced from
 // engine.read query results (map[string]any as decoded by luaengine).
 type ViewModel struct {
@@ -68,6 +78,7 @@ type ViewModel struct {
 	DraggingWorkerID string
 	SelectedWorkerID string
 	MergeConfirm     *MergeConfirm
+	PauseMenu        *PauseMenu
 	// HoverPos overrides the mouse cursor as the cell-inspection hover point,
 	// used by the gamepad cell cursor. nil means fall back to the mouse.
 	HoverPos *image.Point
@@ -79,4 +90,5 @@ func Draw(screen *ebiten.Image, vm ViewModel) {
 	drawUI(screen, vm)
 	drawSidebar(screen, vm)
 	drawMergeModal(screen, vm)
+	drawPauseOverlay(screen, vm)
 }

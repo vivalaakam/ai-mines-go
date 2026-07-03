@@ -78,6 +78,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		mergeConfirm = &render.MergeConfirm{Level: g.pendingMerge.Level}
 	}
 
+	var pauseMenu *render.PauseMenu
+	if g.paused {
+		pauseMenu = &render.PauseMenu{
+			ConfirmExit: g.confirmExit,
+			Gamepad:     g.gamepadPresent,
+			PauseSel:    g.pauseSel,
+			ConfirmSel:  g.confirmSel,
+		}
+	}
+
 	render.Draw(screen, render.ViewModel{
 		Camera:           render.Camera{X: g.camera.X, Y: g.camera.Y, Zoom: g.camera.Zoom},
 		LevelView:        g.cachedLevelView,
@@ -90,6 +100,7 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		DraggingWorkerID: g.draggingWorkerID,
 		SelectedWorkerID: g.selectedWorkerID,
 		MergeConfirm:     mergeConfirm,
+		PauseMenu:        pauseMenu,
 		HoverPos:         g.gamepadHoverPos(),
 	})
 

@@ -95,6 +95,9 @@ func (g *Game) handleGamepadMap(gp gamepadInput) {
 // button over the map, or the merge-modal Yes button while the modal is open)
 // — as opposed to plain map, where the tile is the cursor.
 func (g *Game) pointerOnUI(mx, my int) bool {
+	if g.paused || g.confirmExit {
+		return true
+	}
 	if mx >= render.MapWidth {
 		return true
 	}

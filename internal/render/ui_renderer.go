@@ -25,6 +25,22 @@ var (
 	MergeModalNoButton  = image.Rect(mergeModalRect.Max.X-95, mergeModalRect.Max.Y-32, mergeModalRect.Max.X-10, mergeModalRect.Max.Y-8)
 )
 
+// PauseButton is the always-visible top-right corner button that opens the
+// pause menu. Exported so internal/app can hit-test clicks against the same
+// rect this package draws.
+var PauseButton = image.Rect(ScreenWidth-78, 6, ScreenWidth-8, 30)
+
+// Pause menu modal layout. Continue/Exit buttons are exported for internal/app
+// hit-testing; pauseModalRect/confirmExitModalRect are layout-only.
+var (
+	pauseModalRect       = image.Rect(ScreenWidth/2-130, ScreenHeight/2-100, ScreenWidth/2+130, ScreenHeight/2+100)
+	PauseContinueButton  = image.Rect(pauseModalRect.Min.X+20, pauseModalRect.Min.Y+95, pauseModalRect.Min.X+125, pauseModalRect.Min.Y+135)
+	PauseExitButton      = image.Rect(pauseModalRect.Max.X-125, pauseModalRect.Min.Y+95, pauseModalRect.Max.X-20, pauseModalRect.Min.Y+135)
+	confirmExitModalRect = image.Rect(ScreenWidth/2-120, ScreenHeight/2-50, ScreenWidth/2+120, ScreenHeight/2+50)
+	ConfirmYesButton     = image.Rect(confirmExitModalRect.Min.X+15, confirmExitModalRect.Max.Y-34, confirmExitModalRect.Min.X+105, confirmExitModalRect.Max.Y-10)
+	ConfirmNoButton      = image.Rect(confirmExitModalRect.Max.X-105, confirmExitModalRect.Max.Y-34, confirmExitModalRect.Max.X-15, confirmExitModalRect.Max.Y-10)
+)
+
 // drawMergeModal shows the "merge these two workers?" confirmation prompt
 // triggered by click-selecting a worker and then clicking another worker of
 // the same level (see internal/app/drag.go handleWorkerClick).
@@ -70,12 +86,73 @@ func drawSidebar(screen *ebiten.Image, vm ViewModel) {
 	vector.StrokeRect(screen, float32(sidebarX0), 0, 1, ScreenHeight, 1, color.RGBA{60, 60, 68, 255}, false)
 
 	x := sidebarX0 + sidebarPadding
-	y := sidebarPadding
+	// The top-right corner is reserved for the Pause button (drawn last), so
+	// the sidebar content starts below it instead of at the very top.
+	y := sidebarPadding + 26
 
 	y = drawPlayerSummary(screen, vm, x, y)
 	y = drawResourcesPanel(screen, vm, x, y)
 	y = drawOrdersPanel(screen, vm, x, y)
 	drawOrderEventLog(screen, vm, x, y)
+
+	drawPauseButton(screen, vm)
+}
+
+// drawPauseButton renders the top-right corner button that opens the pause
+// menu. Hidden while the pause overlay is up (the overlay covers it).
+func drawPauseButton(screen *ebiten.Image, vm ViewModel) {
+	if vm.PauseMenu != nil {
+		return
+	}
+	b := PauseButton
+	vector.FillRect(screen, float32(b.Min.X), float32(b.Min.Y), float32(b.Dx()), float32(b.Dy()), color.RGBA{50, 50, 55, 255}, false)
+	vector.StrokeRect(screen, float32(b.Min.X), float32(b.Min.Y), float32(b.Dx()), float32(b.Dy()), 1, color.RGBA{120, 120, 130, 255}, false)
+	ebitenutil.DebugPrintAt(screen, "Pause", b.Min.X+16, b.Min.Y+6)
+}
+
+// drawPauseOverlay dims the screen and draws the Paused menu (Continue/Exit),
+// plus the nested exit-confirmation dialog when requested. Drawn last so it
+// sits above every other layer, including the merge modal.
+func drawPauseOverlay(screen *ebiten.Image, vm ViewModel) {
+	p := vm.PauseMenu
+	if p == nil {
+		return
+	}
+	vector.FillRect(screen, 0, 0, float32(ScreenWidth), float32(ScreenHeight), color.RGBA{0, 0, 0, 170}, false)
+
+	r := pauseModalRect
+	vector.FillRect(screen, float32(r.Min.X), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()), color.RGBA{30, 30, 30, 235}, false)
+	vector.StrokeRect(screen, float32(r.Min.X), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()), 2, color.RGBA{255, 255, 255, 255}, false)
+	ebitenutil.DebugPrintAt(screen, "Paused", r.Min.X+(r.Dx()-len("Paused")*6)/2, r.Min.Y+12)
+	ebitenutil.DebugPrintAt(screen, "ESC / Start to resume", r.Min.X+38, r.Min.Y+44)
+
+	drawModalButton(screen, PauseContinueButton, "Continue", color.RGBA{60, 130, 60, 255}, p.Gamepad && p.PauseSel == 0)
+	drawModalButton(screen, PauseExitButton, "Exit", color.RGBA{130, 60, 60, 255}, p.Gamepad && p.PauseSel == 1)
+
+	if p.ConfirmExit {
+		drawConfirmExitModal(screen, p)
+	}
+}
+
+// drawConfirmExitModal draws the "Save and quit?" yes/no dialog on top of the
+// pause menu.
+func drawConfirmExitModal(screen *ebiten.Image, p *PauseMenu) {
+	r := confirmExitModalRect
+	vector.FillRect(screen, float32(r.Min.X), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()), color.RGBA{20, 20, 20, 245}, false)
+	vector.StrokeRect(screen, float32(r.Min.X), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()), 2, color.RGBA{255, 255, 255, 255}, false)
+	ebitenutil.DebugPrintAt(screen, "Save and quit?", r.Min.X+(r.Dx()-len("Save and quit?")*6)/2, r.Min.Y+16)
+	drawModalButton(screen, ConfirmYesButton, "Yes", color.RGBA{60, 130, 60, 255}, p.Gamepad && p.ConfirmSel == 0)
+	drawModalButton(screen, ConfirmNoButton, "No", color.RGBA{130, 60, 60, 255}, p.Gamepad && p.ConfirmSel == 1)
+}
+
+// drawModalButton fills a button rect, centers its label, and strokes a
+// yellow highlight when the gamepad has it selected.
+func drawModalButton(screen *ebiten.Image, r image.Rectangle, label string, fill color.Color, highlight bool) {
+	vector.FillRect(screen, float32(r.Min.X), float32(r.Min.Y), float32(r.Dx()), float32(r.Dy()), fill, false)
+	if highlight {
+		vector.StrokeRect(screen, float32(r.Min.X)-2, float32(r.Min.Y)-2, float32(r.Dx())+4, float32(r.Dy())+4, 2, color.RGBA{255, 230, 0, 255}, false)
+	}
+	ebitenutil.DebugPrintAt(screen, label, r.Min.X+(r.Dx()-len(label)*6)/2, r.Min.Y+(r.Dy()-8)/2)
 }
 
 func drawPlayerSummary(screen *ebiten.Image, vm ViewModel, x, y int) int {
