@@ -79,6 +79,16 @@ type Game struct {
 	// standard-layout one (see syncGamepads in input.go).
 	gamepadIDs    map[ebiten.GamepadID]struct{}
 	gamepadIDsBuf []ebiten.GamepadID
+
+	// cursor is the gamepad-driven virtual cursor position; cursorActive is
+	// true while the player is using the pad (left stick) rather than the
+	// mouse. pointer is this frame's unified mouse/gamepad pointer consumed
+	// by update.go/drag.go; lastMousePos detects mouse movement to hand
+	// control back from the gamepad to the mouse.
+	cursor       image.Point
+	cursorActive bool
+	pointer      pointerState
+	lastMousePos image.Point
 }
 
 // PendingMerge holds a same-level worker pair awaiting the player's yes/no

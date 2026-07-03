@@ -1,10 +1,13 @@
 package app
 
 import (
+	"image"
+	"image/color"
 	"log"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
@@ -86,6 +89,18 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		SelectedWorkerID: g.selectedWorkerID,
 		MergeConfirm:     mergeConfirm,
 	})
+
+	if g.pointer.gamepad {
+		drawCursor(screen, g.pointer.pos)
+	}
+}
+
+// drawCursor renders a small crosshair for the gamepad-driven virtual cursor
+// (there is no OS cursor while the pad is active).
+func drawCursor(screen *ebiten.Image, p image.Point) {
+	x, y := float32(p.X), float32(p.Y)
+	vector.StrokeLine(screen, x-10, y, x+10, y, 2, color.White, false)
+	vector.StrokeLine(screen, x, y-10, x, y+10, 2, color.White, false)
 }
 
 // refreshStateViews re-fetches the 5 camera-independent view-models in one

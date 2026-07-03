@@ -34,7 +34,7 @@ func (g *Game) Update() error {
 			render.ScreenHeight/g.camera.Zoom,
 		)
 	}
-	if input.HireWorkerClicked {
+	if g.pointer.justPressed && g.pointer.pos.In(render.HireWorkerButton) {
 		if err := g.hireWorker(); err != nil {
 			return err
 		}

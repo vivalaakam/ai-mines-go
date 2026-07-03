@@ -5,9 +5,6 @@ import (
 	"log"
 	"strconv"
 
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
-
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
 
@@ -28,8 +25,8 @@ func (g *Game) handleWorkerDrag() error {
 		return nil
 	}
 
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		mx, my := ebiten.CursorPosition()
+	if g.pointer.justPressed {
+		mx, my := g.pointer.pos.X, g.pointer.pos.Y
 		if g.pendingMerge != nil {
 			g.suppressNextClick = true
 			return g.resolvePendingMergeClick(mx, my)
@@ -54,7 +51,7 @@ func (g *Game) handleWorkerDrag() error {
 		return nil
 	}
 
-	if !inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
+	if !g.pointer.justReleased {
 		return nil
 	}
 	if g.suppressNextClick {
@@ -65,7 +62,7 @@ func (g *Game) handleWorkerDrag() error {
 	workerID := g.draggingWorkerID
 	g.draggingWorkerID = ""
 
-	mx, my := ebiten.CursorPosition()
+	mx, my := g.pointer.pos.X, g.pointer.pos.Y
 	cx, cy := render.ScreenToCell(mx, my, g.renderCamera())
 
 	if isNearby(g.pressPos, image.Pt(mx, my)) {
