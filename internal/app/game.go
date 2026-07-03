@@ -3,6 +3,8 @@ package app
 import (
 	"image"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
 	"github.com/vivalaakam/ai-mines-go/internal/persistence"
 	"github.com/vivalaakam/ai-mines-go/internal/render"
@@ -72,6 +74,65 @@ type Game struct {
 	// click a same-level worker to ask for merge confirmation (see drag.go).
 	selectedWorkerID string
 	pendingMerge     *PendingMerge
+
+	// gamepadIDs tracks connected gamepads so pollInput can read the first
+	// standard-layout one (see syncGamepads in input.go).
+	gamepadIDs    map[ebiten.GamepadID]struct{}
+	gamepadIDsBuf []ebiten.GamepadID
+
+	// pointer is this frame's mouse pointer, consumed by update.go/drag.go for
+	// click interactions. It is only used when no gamepad is connected; while a
+	// pad is connected the highlighted tile is the single cursor and A/mouse
+	// clicks act on it via gamepad.go's mapCursorAction, so g.pointer is zeroed
+	// to keep drag.go / UI hit-testing from double-acting.
+	pointer pointerState
+
+	// cursorCell is the single map cursor: the highlighted tile. The left
+	// stick steps it one cell at a time (gamepad.go); mouse motion snaps it to
+	// the cell under the mouse — one entity driven by both inputs.
+	// cursorFromMouse tracks whether the mouse (true) or the stick (false) last
+	// drove it: over the sidebar the mouse becomes a normal OS cursor instead
+	// (tileActive=false), so sidebar buttons are clickable; the stick always
+	// reclaims the tile. gamepadPresent gates pad-mode behavior; cursorHidden
+	// tracks the OS cursor mode to avoid re-setting it every frame. cursorCD
+	// paces stick cell-stepping. lastMousePos detects mouse motion to snap.
+	cursorCellX     float64
+	cursorCellY     float64
+	cursorInit      bool
+	cursorCD        int
+	cursorFromMouse bool
+	tileActive      bool
+	gamepadPresent  bool
+	cursorHidden    bool
+	lastMousePos    image.Point
+
+	// Gamepad focus/list state (gamepad.go):
+	//   focus         - which surface the pad drives: map, orders, or hire
+	//   orderSel      - highlighted available-order index (orders focus)
+	//   hireSel       - highlighted purchasable-worker index (hire focus)
+	//   hireLevels    - cached purchasable levels while the hire panel is open
+	//   listCD        - frames until a held up/down advances the list again
+	focus      focusMode
+	orderSel   int
+	hireSel    int
+	hireLevels []hireLevel
+	listCD     int
+}
+
+// focusMode is which surface the gamepad currently drives. Mouse input is
+// independent and always active regardless of focus.
+type focusMode int
+
+const (
+	focusMap focusMode = iota
+	focusOrders
+	focusHire
+)
+
+// hireLevel is one buyable worker tier shown in the hire-select panel.
+type hireLevel struct {
+	Level float64
+	Cost  float64
 }
 
 // PendingMerge holds a same-level worker pair awaiting the player's yes/no

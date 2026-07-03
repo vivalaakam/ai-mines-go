@@ -2,7 +2,6 @@ package app
 
 import (
 	"image"
-	"log"
 
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
@@ -13,24 +12,15 @@ import (
 // the caller can stop it from also being treated as a map click.
 func (g *Game) handleOrderButtonClick(mx, my int) (bool, error) {
 	pt := image.Pt(mx, my)
-	for i, orderID := range g.lastAvailableOrderIDs {
-		var command string
+	for i := range g.lastAvailableOrderIDs {
 		switch {
 		case pt.In(render.AvailableOrderAcceptButton(i)):
-			command = "accept_order"
+			g.acceptOrderAtIndex(i)
+			return true, nil
 		case pt.In(render.AvailableOrderDeclineButton(i)):
-			command = "decline_order"
-		default:
-			continue
+			g.declineOrderAtIndex(i)
+			return true, nil
 		}
-		result, err := g.apply(command, map[string]any{"orderId": orderID})
-		if err != nil {
-			return true, err
-		}
-		if !result.OK {
-			log.Printf("%s rejected: %+v", command, result.Error)
-		}
-		return true, nil
 	}
 	return false, nil
 }

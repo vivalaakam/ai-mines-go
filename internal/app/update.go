@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
@@ -18,10 +20,20 @@ const orderEventLogCap = 20
 // action is periodically calling engine.Apply("tick", ...) once per accumulated
 // real second (REQUIREMENTS.md §34).
 func (g *Game) Update() error {
-	input := PollInput()
+	g.syncGamepads()
+	input := g.pollInput()
 	g.camera.Move(input.CameraDX, input.CameraDY)
-	if input.ZoomDelta != 0 {
-		g.camera.SetZoom(g.camera.Zoom + input.ZoomDelta)
+	zoomDelta := input.ZoomDelta
+	if input.Gamepad.present && g.focus == focusMap {
+		if input.Gamepad.dpadUp {
+			zoomDelta += dpadZoomSpeed
+		}
+		if input.Gamepad.dpadDown {
+			zoomDelta -= dpadZoomSpeed
+		}
+	}
+	if zoomDelta != 0 {
+		g.camera.SetZoom(g.camera.Zoom + zoomDelta)
 	}
 	if g.mapBounds != nil {
 		g.camera.Clamp(
@@ -33,7 +45,7 @@ func (g *Game) Update() error {
 			render.ScreenHeight/g.camera.Zoom,
 		)
 	}
-	if input.HireWorkerClicked {
+	if g.pointer.justPressed && g.pointer.pos.In(render.HireWorkerButton) {
 		if err := g.hireWorker(); err != nil {
 			return err
 		}
@@ -41,6 +53,23 @@ func (g *Game) Update() error {
 
 	if err := g.handleWorkerDrag(); err != nil {
 		return err
+	}
+
+	g.handleGamepad(input.Gamepad)
+
+	// The tile is the active cursor while a pad is connected and the player is
+	// on the map (not running the mouse over the sidebar or a button, where it
+	// becomes a normal OS cursor). Hide the OS cursor only in tile mode so the
+	// two never overlap; tracked to set the mode only on a change.
+	mx, my := ebiten.CursorPosition()
+	g.tileActive = g.gamepadPresent && g.focus == focusMap && (!g.cursorFromMouse || !g.pointerOnUI(mx, my))
+	if wantHidden := g.tileActive; wantHidden != g.cursorHidden {
+		if wantHidden {
+			ebiten.SetCursorMode(ebiten.CursorModeHidden)
+		} else {
+			ebiten.SetCursorMode(ebiten.CursorModeVisible)
+		}
+		g.cursorHidden = wantHidden
 	}
 
 	if !g.accumulator.Advance() {

@@ -4,6 +4,7 @@
 package render
 
 import (
+	"image"
 	"math"
 
 	"github.com/hajimehoshi/ebiten/v2"
@@ -67,6 +68,9 @@ type ViewModel struct {
 	DraggingWorkerID string
 	SelectedWorkerID string
 	MergeConfirm     *MergeConfirm
+	// HoverPos overrides the mouse cursor as the cell-inspection hover point,
+	// used by the gamepad cell cursor. nil means fall back to the mouse.
+	HoverPos *image.Point
 }
 
 func Draw(screen *ebiten.Image, vm ViewModel) {

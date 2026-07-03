@@ -85,6 +85,19 @@ handlers["get_workers"] = function(state)
   }
 end
 
+-- get_purchasable_workers lists every worker level the player may currently
+-- buy (1..max_purchasable_worker_level) with its cost, so the Go gamepad
+-- hire-select UI can render the list without duplicating the cost formula
+-- (REQUIREMENTS.md: economy/cost rules live in Lua, not Go).
+handlers["get_purchasable_workers"] = function(state)
+  local maxLevel = balance.max_purchasable_worker_level(state.highestUnlockedWorkerLevel)
+  local levels = {}
+  for lvl = 1, maxLevel do
+    levels[#levels + 1] = { level = lvl, cost = balance.worker_purchase_cost(lvl) }
+  end
+  return { levels = levels }
+end
+
 handlers["get_storage_state"] = function(state)
   local list = {}
   for _, storage in pairs(state.storages) do
