@@ -18,7 +18,8 @@ const orderEventLogCap = 20
 // action is periodically calling engine.Apply("tick", ...) once per accumulated
 // real second (REQUIREMENTS.md §34).
 func (g *Game) Update() error {
-	input := PollInput()
+	g.syncGamepads()
+	input := g.pollInput()
 	g.camera.Move(input.CameraDX, input.CameraDY)
 	if input.ZoomDelta != 0 {
 		g.camera.SetZoom(g.camera.Zoom + input.ZoomDelta)

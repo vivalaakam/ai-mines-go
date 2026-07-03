@@ -3,6 +3,8 @@ package app
 import (
 	"image"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
 	"github.com/vivalaakam/ai-mines-go/internal/persistence"
 	"github.com/vivalaakam/ai-mines-go/internal/render"
@@ -72,6 +74,11 @@ type Game struct {
 	// click a same-level worker to ask for merge confirmation (see drag.go).
 	selectedWorkerID string
 	pendingMerge     *PendingMerge
+
+	// gamepadIDs tracks connected gamepads so pollInput can read the first
+	// standard-layout one (see syncGamepads in input.go).
+	gamepadIDs    map[ebiten.GamepadID]struct{}
+	gamepadIDsBuf []ebiten.GamepadID
 }
 
 // PendingMerge holds a same-level worker pair awaiting the player's yes/no
