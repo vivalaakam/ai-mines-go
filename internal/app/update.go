@@ -22,19 +22,6 @@ const orderEventLogCap = 20
 func (g *Game) Update() error {
 	g.syncGamepads()
 	input := g.pollInput()
-	// Hide the OS cursor while a gamepad is connected so only the single
-	// unified cursor entity (g.cursor, drawn in draw.go) is visible — the
-	// two-overlapping-cursors bug on mouse+pad (e.g. Steam Deck). Tracked so
-	// we only touch the mode on a change, not every frame.
-	wantHidden := g.gamepadPresent
-	if wantHidden != g.cursorHidden {
-		if wantHidden {
-			ebiten.SetCursorMode(ebiten.CursorModeHidden)
-		} else {
-			ebiten.SetCursorMode(ebiten.CursorModeVisible)
-		}
-		g.cursorHidden = wantHidden
-	}
 	g.camera.Move(input.CameraDX, input.CameraDY)
 	zoomDelta := input.ZoomDelta
 	if input.Gamepad.present && g.focus == focusMap {
@@ -69,6 +56,21 @@ func (g *Game) Update() error {
 	}
 
 	g.handleGamepad(input.Gamepad)
+
+	// The tile is the active cursor while a pad is connected and the player is
+	// on the map (not running the mouse over the sidebar, where it becomes a
+	// normal OS cursor). Hide the OS cursor only in tile mode so the two never
+	// overlap; tracked to set the mode only on a change.
+	mx, _ := ebiten.CursorPosition()
+	g.tileActive = g.gamepadPresent && g.focus == focusMap && (!g.cursorFromMouse || mx < render.MapWidth)
+	if wantHidden := g.tileActive; wantHidden != g.cursorHidden {
+		if wantHidden {
+			ebiten.SetCursorMode(ebiten.CursorModeHidden)
+		} else {
+			ebiten.SetCursorMode(ebiten.CursorModeVisible)
+		}
+		g.cursorHidden = wantHidden
+	}
 
 	if !g.accumulator.Advance() {
 		return nil

@@ -4,6 +4,8 @@ import (
 	"log"
 	"math"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
 
@@ -33,10 +35,12 @@ func (g *Game) handleGamepad(gp gamepadInput) {
 }
 
 // handleGamepadMap drives the highlighted tile over the map. The left stick
-// steps it one cell at a time (with a cooldown); A (or a mouse click, which
-// acts on the same tile) selects/places/merges the worker under the tile via
-// mapCursorAction; B cancels a pending merge or selection; Select opens the
-// hire panel; R2 switches focus to the orders panel.
+// steps it one cell at a time (with a cooldown) and reclaims it from the mouse;
+// A (or a mouse click on the map) selects/places/merges the worker under the
+// tile via mapCursorAction, but only while the tile is the active cursor (the
+// mouse over the sidebar takes the cursor back to a normal OS cursor). B
+// cancels a pending merge or selection; Select opens the hire panel; R2
+// switches focus to the orders panel.
 func (g *Game) handleGamepadMap(gp gamepadInput) {
 	g.initCursor()
 
@@ -57,7 +61,10 @@ func (g *Game) handleGamepadMap(gp gamepadInput) {
 		}
 		return
 	}
-	if gp.a || gp.mouseClick {
+
+	mx, _ := ebiten.CursorPosition()
+	tileActive := !g.cursorFromMouse || mx < render.MapWidth
+	if tileActive && (gp.a || gp.mouseClick) {
 		g.mapCursorAction()
 		return
 	}
@@ -71,6 +78,8 @@ func (g *Game) handleGamepadMap(gp gamepadInput) {
 	if g.cursorCD > 0 {
 		return
 	}
+	// The stick is driving the tile — reclaim it from the mouse.
+	g.cursorFromMouse = false
 	if math.Abs(gp.leftX) >= math.Abs(gp.leftY) {
 		g.cursorCellX += math.Copysign(1, gp.leftX)
 	} else {

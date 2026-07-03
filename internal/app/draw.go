@@ -99,8 +99,10 @@ func (g *Game) Draw(screen *ebiten.Image) {
 // gamepadHoverPos returns the screen-space center of the tile cursor so render
 // draws the single highlighted-tile square + tooltip over it (the cursor IS
 // the tile, one square — no separate reticle). nil falls back to the mouse.
+// Returns nil when the tile isn't the active cursor (no pad, not on the map, or
+// the mouse is running the sidebar as a normal OS cursor).
 func (g *Game) gamepadHoverPos() *image.Point {
-	if !g.gamepadPresent || g.focus != focusMap || !g.cursorInit {
+	if !g.tileActive || !g.cursorInit {
 		return nil
 	}
 	x, y, size, ok := g.gamepadCursorScreenPos()

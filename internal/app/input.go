@@ -123,12 +123,16 @@ func (g *Game) pollGamepad(s *InputState) {
 	g.gamepadPresent = gp.present
 }
 
-// syncPointer builds this frame's g.pointer. With a gamepad connected the
-// single cursor is the highlighted tile (cursorCell): mouse motion snaps it to
-// the cell under the mouse, the left stick steps it (gamepad.go), and A/mouse
-// clicks act on it via mapCursorAction — so g.pointer is zeroed to keep
-// drag.go / UI hit-testing from double-acting. Without a gamepad g.pointer
-// just tracks the OS mouse cursor and drag.go handles clicks/drags normally.
+// syncPointer builds this frame's g.pointer. With a gamepad connected:
+//   - mouse over the sidebar (x >= MapWidth): the mouse is a normal OS cursor
+//     — g.pointer tracks it so sidebar buttons are clickable, the tile stays
+//     parked (no tile highlight).
+//   - otherwise (mouse over the map, or the stick last moved the tile): the
+//     tile is the cursor — mouse motion snaps it to the cell under the mouse,
+//     g.pointer is zeroed so drag.go / UI hit-testing defer to mapCursorAction.
+//
+// Without a gamepad g.pointer just tracks the OS mouse cursor and drag.go
+// handles clicks/drags normally.
 func (g *Game) syncPointer(gp gamepadInput) {
 	mx, my := ebiten.CursorPosition()
 	mousePos := image.Pt(mx, my)
@@ -136,23 +140,32 @@ func (g *Game) syncPointer(gp gamepadInput) {
 	mouseReleased := inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft)
 
 	if gp.present {
-		if mousePos != g.lastMousePos {
-			// Mouse moved: the tile follows the mouse — same entity, both
-			// inputs drive it.
+		mouseMoved := mousePos != g.lastMousePos
+		if mouseMoved {
+			g.cursorFromMouse = true
+		}
+		g.lastMousePos = mousePos
+
+		// Mouse running the sidebar → normal mouse, tile parked.
+		if g.cursorFromMouse && mx >= render.MapWidth {
+			g.pointer = pointerState{pos: mousePos, justPressed: mousePressed, justReleased: mouseReleased}
+			return
+		}
+
+		// Tile mode: snap the tile to the mouse cell on mouse motion, and zero
+		// the pointer so drag.go / UI hit-testing defer to the tile.
+		if mouseMoved {
 			cx, cy := render.ScreenToCell(mx, my, g.renderCamera())
 			g.cursorCellX, g.cursorCellY = cx, cy
 			g.clampCursorCell()
 			g.cursorInit = true
 		}
-		g.lastMousePos = mousePos
-		// Pad mode: the tile is the cursor. Suppress the mouse pointer so the
-		// drag.go/UI click paths don't fire; A and mouse-click both go through
-		// mapCursorAction in gamepad.go.
 		g.pointer = pointerState{}
 		return
 	}
 
 	// No gamepad: pure mouse. Drop the tile so a reconnect re-inits it.
+	g.cursorFromMouse = false
 	g.cursorInit = false
 	g.pointer = pointerState{
 		pos:          mousePos,

@@ -90,16 +90,21 @@ type Game struct {
 	// cursorCell is the single map cursor: the highlighted tile. The left
 	// stick steps it one cell at a time (gamepad.go); mouse motion snaps it to
 	// the cell under the mouse — one entity driven by both inputs.
-	// gamepadPresent hides the OS cursor so only the tile is visible (no
-	// two-cursor overlap on mouse+pad). lastMousePos detects mouse motion to
-	// snap the tile to the mouse. cursorCD paces stick cell-stepping.
-	cursorCellX    float64
-	cursorCellY    float64
-	cursorInit     bool
-	cursorCD       int
-	gamepadPresent bool
-	cursorHidden   bool
-	lastMousePos   image.Point
+	// cursorFromMouse tracks whether the mouse (true) or the stick (false) last
+	// drove it: over the sidebar the mouse becomes a normal OS cursor instead
+	// (tileActive=false), so sidebar buttons are clickable; the stick always
+	// reclaims the tile. gamepadPresent gates pad-mode behavior; cursorHidden
+	// tracks the OS cursor mode to avoid re-setting it every frame. cursorCD
+	// paces stick cell-stepping. lastMousePos detects mouse motion to snap.
+	cursorCellX     float64
+	cursorCellY     float64
+	cursorInit      bool
+	cursorCD        int
+	cursorFromMouse bool
+	tileActive      bool
+	gamepadPresent  bool
+	cursorHidden    bool
+	lastMousePos    image.Point
 
 	// Gamepad focus/list state (gamepad.go):
 	//   focus         - which surface the pad drives: map, orders, or hire
