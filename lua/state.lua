@@ -35,6 +35,7 @@ function M.new_game(seedPhrase)
     workers = {},
     storages = {},
     orders = {},
+    orderArrivalMisses = 0,
     nextIds = { worker = 1, storage = 1, order = 1, level = 1 },
   }
 
@@ -66,8 +67,9 @@ function M.export_state(state)
 end
 
 --- Restores an engine's state from a persistence-adapter-provided snapshot.
---- ponytail: backfills uncapped storages for any resource missing one, so
---- saves written before storages became unlimited-by-default still work.
+--- ponytail: backfills uncapped storages for any resource missing one, plus
+--- newer rulesConfig keys and per-requirement order prices, so saves written
+--- before those fields existed still work.
 function M.load_state(state)
   local copy = deep_copy(state)
   copy.storages = copy.storages or {}
@@ -82,6 +84,27 @@ function M.load_state(state)
       }
     end
   end
+
+  copy.rulesConfig = copy.rulesConfig or {}
+  for key, value in pairs(defaultRules) do
+    if copy.rulesConfig[key] == nil then
+      copy.rulesConfig[key] = deep_copy(value)
+    end
+  end
+
+  local basePriceById = {}
+  for _, resource in ipairs(resourceConfig.list) do
+    basePriceById[resource.id] = resource.basePrice
+  end
+  for _, order in pairs(copy.orders or {}) do
+    for _, req in ipairs(order.requirements or {}) do
+      if not req.pricePerUnit or req.pricePerUnit <= 0 then
+        req.pricePerUnit = basePriceById[req.resourceId] or 1
+      end
+    end
+  end
+  copy.orderArrivalMisses = copy.orderArrivalMisses or 0
+
   return copy
 end
 

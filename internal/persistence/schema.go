@@ -114,7 +114,16 @@ CREATE TABLE IF NOT EXISTS order_requirements (
 	resource_id TEXT NOT NULL,
 	required_amount REAL NOT NULL,
 	delivered_amount REAL NOT NULL,
+	price_per_unit REAL NOT NULL DEFAULT 0,
 	PRIMARY KEY (save_id, order_id, idx),
 	FOREIGN KEY (save_id, order_id) REFERENCES orders(save_id, id) ON DELETE CASCADE
 );
 `
+
+// migrations are additive column changes applied after the base schema, for
+// databases created before the column existed. Errors from re-adding an
+// already-present column are ignored in Open() - the poor man's idempotency
+// SQLite affords without a migration framework (still an open decision, §43.5).
+var migrations = []string{
+	`ALTER TABLE order_requirements ADD COLUMN price_per_unit REAL NOT NULL DEFAULT 0;`,
+}

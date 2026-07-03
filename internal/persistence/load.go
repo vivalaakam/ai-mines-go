@@ -331,7 +331,7 @@ func (a *Adapter) loadOrders(saveID string) (map[string]any, error) {
 
 func (a *Adapter) loadOrderRequirements(saveID, orderID string, order map[string]any) error {
 	rows, err := a.db.Query(`
-		SELECT resource_id, required_amount, delivered_amount
+		SELECT resource_id, required_amount, delivered_amount, price_per_unit
 		FROM order_requirements WHERE save_id = ? AND order_id = ? ORDER BY idx`, saveID, orderID)
 	if err != nil {
 		return fmt.Errorf("querying order_requirements: %w", err)
@@ -341,12 +341,13 @@ func (a *Adapter) loadOrderRequirements(saveID, orderID string, order map[string
 	requirements := order["requirements"].([]any)
 	for rows.Next() {
 		var resourceID string
-		var required, delivered float64
-		if err := rows.Scan(&resourceID, &required, &delivered); err != nil {
+		var required, delivered, pricePerUnit float64
+		if err := rows.Scan(&resourceID, &required, &delivered, &pricePerUnit); err != nil {
 			return fmt.Errorf("scanning order_requirement: %w", err)
 		}
 		requirements = append(requirements, map[string]any{
 			"resourceId": resourceID, "requiredAmount": required, "deliveredAmount": delivered,
+			"pricePerUnit": pricePerUnit,
 		})
 	}
 	order["requirements"] = requirements

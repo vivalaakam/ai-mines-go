@@ -38,6 +38,15 @@ func (g *Game) handleWorkerDrag() error {
 			g.suppressNextClick = true
 			return nil
 		}
+		if consumed, err := g.handleOrderButtonClick(mx, my); consumed || err != nil {
+			g.suppressNextClick = consumed
+			return err
+		}
+		if mx >= render.MapWidth {
+			// Sidebar area but not on a button - never a map interaction.
+			g.suppressNextClick = true
+			return nil
+		}
 		g.suppressNextClick = false
 		g.pressPos = image.Pt(mx, my)
 		cx, cy := render.ScreenToCell(mx, my, g.renderCamera())

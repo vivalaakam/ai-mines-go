@@ -20,13 +20,16 @@ workers             the global worker pool, including assigned_side (which
                      the one piece of state that lives on the cell, not the worker,
                      in the Lua model)
 storages            one row per storage
-orders / order_requirements
+orders / order_requirements   requirements carry price_per_unit (each shipped
+                     part is paid at that price)
 ```
 
 No table stores the whole state as a JSON blob (REQUIREMENTS.md §28). A dedicated
 migration framework is not used yet (open decision, REQUIREMENTS.md §43.5) - the
-schema is applied via idempotent `CREATE TABLE IF NOT EXISTS` statements, which is
-sufficient while the schema only grows additively.
+schema is applied via idempotent `CREATE TABLE IF NOT EXISTS` statements, plus a
+short `migrations` list of additive `ALTER TABLE ... ADD COLUMN` statements whose
+"duplicate column" errors are ignored on `Open()`, which is sufficient while the
+schema only grows additively.
 
 ## Adapter contract
 

@@ -57,6 +57,19 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		return
 	}
 
+	availableOrders, err := g.engine.Read("get_available_orders", nil)
+	if err != nil {
+		log.Printf("get_available_orders failed: %v", err)
+		return
+	}
+	g.lastAvailableOrderIDs = availableOrderIDs(availableOrders)
+
+	activeOrders, err := g.engine.Read("get_active_orders", nil)
+	if err != nil {
+		log.Printf("get_active_orders failed: %v", err)
+		return
+	}
+
 	var mergeConfirm *render.MergeConfirm
 	if g.pendingMerge != nil {
 		mergeConfirm = &render.MergeConfirm{Level: g.pendingMerge.Level}
@@ -68,8 +81,31 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		PlayerSummary:    playerSummary,
 		Workers:          workers,
 		Resources:        resources,
+		AvailableOrders:  availableOrders,
+		ActiveOrders:     activeOrders,
+		OrderEventLog:    g.orderEventLog,
 		DraggingWorkerID: g.draggingWorkerID,
 		SelectedWorkerID: g.selectedWorkerID,
 		MergeConfirm:     mergeConfirm,
 	})
+}
+
+// availableOrderIDs extracts order ids in the same (already Lua-sorted) order
+// the panel will draw them, capped to the rows that actually get buttons.
+func availableOrderIDs(availableOrders map[string]any) []string {
+	list, _ := availableOrders["orders"].([]any)
+	var ids []string
+	for _, raw := range list {
+		if len(ids) >= render.MaxAvailableOrderRows {
+			break
+		}
+		order, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if id, _ := order["id"].(string); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }

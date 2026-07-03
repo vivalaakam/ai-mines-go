@@ -32,6 +32,10 @@ func Open(path string) (*Adapter, error) {
 		_ = db.Close()
 		return nil, fmt.Errorf("applying schema: %w", err)
 	}
+	for _, migration := range migrations {
+		// "duplicate column name" on an already-migrated database is expected.
+		_, _ = db.Exec(migration)
+	}
 	return &Adapter{db: db}, nil
 }
 

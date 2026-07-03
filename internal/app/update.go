@@ -1,10 +1,16 @@
 package app
 
 import (
+	"fmt"
 	"log"
 
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
+
+// orderEventLogCap bounds how many recent order events Game retains; the
+// sidebar only displays the first few (render.orderEventLogMaxLines), this
+// just keeps the backing slice from growing unbounded over a long session.
+const orderEventLogCap = 20
 
 // Update runs once per Ebitengine frame. It never computes gameplay outcomes
 // itself: input only adjusts local camera state, and the only game-affecting
@@ -22,7 +28,7 @@ func (g *Game) Update() error {
 			g.mapBounds.MinY*render.TileSize,
 			(g.mapBounds.MaxX+1)*render.TileSize,
 			(g.mapBounds.MaxY+1)*render.TileSize,
-			render.ScreenWidth/g.camera.Zoom,
+			render.MapWidth/g.camera.Zoom,
 			render.ScreenHeight/g.camera.Zoom,
 		)
 	}
@@ -91,8 +97,26 @@ func (g *Game) handleLuaEvents(events []any) {
 		case "autosave_requested":
 			g.autosave(event["reason"])
 		case "order_completed":
-			log.Printf("order completed: orderId=%v", event["orderId"])
+			g.logOrderEvent(fmt.Sprintf("order %v completed", event["orderId"]))
+		case "order_shipped":
+			g.logOrderEvent(fmt.Sprintf("order %v: shipped %v %v (+$%v)",
+				event["orderId"], event["amount"], event["resourceId"], event["payment"]))
+		case "order_arrived":
+			g.logOrderEvent(fmt.Sprintf("order %v arrived", event["orderId"]))
+		case "order_expired":
+			g.logOrderEvent(fmt.Sprintf("order %v expired", event["orderId"]))
 		}
+	}
+}
+
+// logOrderEvent records a human-readable order event, newest first, both in
+// the application log and in Game.orderEventLog (rendered in the sidebar so
+// order activity is visible in the UI itself, not just the console).
+func (g *Game) logOrderEvent(line string) {
+	log.Print(line)
+	g.orderEventLog = append([]string{line}, g.orderEventLog...)
+	if len(g.orderEventLog) > orderEventLogCap {
+		g.orderEventLog = g.orderEventLog[:orderEventLogCap]
 	}
 }
 

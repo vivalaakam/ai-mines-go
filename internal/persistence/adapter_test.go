@@ -59,6 +59,50 @@ func TestCreateSaveLoadRoundTrip(t *testing.T) {
 	}
 }
 
+func TestOrderPricePerUnitSurvivesRoundTrip(t *testing.T) {
+	a := openTestAdapter(t)
+
+	engine, err := a.CreateNewEngine("save-1", "order-price-seed")
+	if err != nil {
+		t.Fatalf("CreateNewEngine() error: %v", err)
+	}
+	defer engine.Close()
+
+	before := readFirstOrderRequirement(t, engine.Read)
+	price, _ := before["pricePerUnit"].(float64)
+	if price <= 0 {
+		t.Fatalf("expected a positive pricePerUnit on a fresh order, got %v", before["pricePerUnit"])
+	}
+
+	loaded, err := a.LoadEngine("save-1")
+	if err != nil {
+		t.Fatalf("LoadEngine() error: %v", err)
+	}
+	defer loaded.Close()
+
+	after := readFirstOrderRequirement(t, loaded.Read)
+	if after["pricePerUnit"] != before["pricePerUnit"] {
+		t.Fatalf("pricePerUnit changed across save/load: before=%v after=%v", before["pricePerUnit"], after["pricePerUnit"])
+	}
+}
+
+func readFirstOrderRequirement(t *testing.T, read func(string, map[string]any) (map[string]any, error)) map[string]any {
+	t.Helper()
+	orders, err := read("get_available_orders", nil)
+	if err != nil {
+		t.Fatalf("Read(get_available_orders) error: %v", err)
+	}
+	list, _ := orders["orders"].([]any)
+	if len(list) == 0 {
+		t.Fatalf("expected available orders, got %+v", orders)
+	}
+	reqs, _ := list[0].(map[string]any)["requirements"].([]any)
+	if len(reqs) == 0 {
+		t.Fatalf("expected order requirements, got %+v", list[0])
+	}
+	return reqs[0].(map[string]any)
+}
+
 func TestSaveEngineOverwritesPreviousSave(t *testing.T) {
 	a := openTestAdapter(t)
 

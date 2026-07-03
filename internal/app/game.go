@@ -37,6 +37,16 @@ type Game struct {
 	pressPos          image.Point
 	suppressNextClick bool
 
+	// lastAvailableOrderIDs caches the available-order ids in the exact order
+	// the orders panel drew them last frame, so Update can hit-test the
+	// index-based Accept/Decline button rects against the right order.
+	lastAvailableOrderIDs []string
+
+	// orderEventLog is a newest-first ring of human-readable order events
+	// (arrived/shipped/expired/completed), shown in the sidebar so order
+	// activity is visible in the UI itself, not just the application log.
+	orderEventLog []string
+
 	// selectedWorkerID and pendingMerge back the click-to-select "cut/paste"
 	// gesture: click a worker to select it, click a deposit to move it there,
 	// click a same-level worker to ask for merge confirmation (see drag.go).

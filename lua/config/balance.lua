@@ -14,4 +14,9 @@ function M.max_purchasable_worker_level(highestUnlockedWorkerLevel)
   return math.max(1, highestUnlockedWorkerLevel - 2)
 end
 
+--- Per-unit order price, rolled from the resource's base price range.
+function M.order_price_per_unit(rng, basePrice)
+  return rng:next_int(basePrice, basePrice * 3)
+end
+
 return M
