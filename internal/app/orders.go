@@ -23,7 +23,7 @@ func (g *Game) handleOrderButtonClick(mx, my int) (bool, error) {
 		default:
 			continue
 		}
-		result, err := g.engine.Apply(command, map[string]any{"orderId": orderID})
+		result, err := g.apply(command, map[string]any{"orderId": orderID})
 		if err != nil {
 			return true, err
 		}

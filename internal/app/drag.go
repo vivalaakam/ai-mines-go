@@ -76,7 +76,7 @@ func (g *Game) handleWorkerDrag() error {
 	}
 
 	if targetWorkerID := workerAtCell(g.lastLevelView, cx, cy); targetWorkerID != "" && targetWorkerID != workerID {
-		result, err := g.engine.Apply("merge_workers", map[string]any{"workerIds": []any{workerID, targetWorkerID}})
+		result, err := g.apply("merge_workers", map[string]any{"workerIds": []any{workerID, targetWorkerID}})
 		if err != nil {
 			return err
 		}
@@ -87,7 +87,7 @@ func (g *Game) handleWorkerDrag() error {
 	}
 
 	if targetCellID, ok := depositCellAt(g.lastLevelView, cx, cy); ok {
-		result, err := g.engine.Apply("assign_worker_to_deposit", map[string]any{
+		result, err := g.apply("assign_worker_to_deposit", map[string]any{
 			"workerId":     workerID,
 			"levelId":      g.levelID,
 			"targetCellId": targetCellID,
@@ -137,7 +137,7 @@ func (g *Game) handleWorkerClick(workerID string, cx, cy float64) error {
 
 	workerToMove := g.selectedWorkerID
 	g.selectedWorkerID = ""
-	result, err := g.engine.Apply("assign_worker_to_deposit", map[string]any{
+	result, err := g.apply("assign_worker_to_deposit", map[string]any{
 		"workerId":     workerToMove,
 		"levelId":      g.levelID,
 		"targetCellId": targetCellID,
@@ -160,7 +160,7 @@ func (g *Game) resolvePendingMergeClick(mx, my int) error {
 	if !(image.Pt(mx, my).In(render.MergeModalYesButton)) {
 		return nil
 	}
-	result, err := g.engine.Apply("merge_workers", map[string]any{"workerIds": []any{merge.WorkerA, merge.WorkerB}})
+	result, err := g.apply("merge_workers", map[string]any{"workerIds": []any{merge.WorkerA, merge.WorkerB}})
 	if err != nil {
 		return err
 	}

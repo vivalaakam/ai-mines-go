@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
 
@@ -46,7 +47,7 @@ func (g *Game) Update() error {
 		return nil
 	}
 
-	result, err := g.engine.Apply("tick", map[string]any{"ticksPassed": float64(1)})
+	result, err := g.apply("tick", map[string]any{"ticksPassed": float64(1)})
 	if err != nil {
 		return err
 	}
@@ -64,6 +65,18 @@ func (g *Game) Update() error {
 	return nil
 }
 
+// apply sends a mutating command to the engine and, on success, marks the
+// cached view-models stale so the next Draw re-fetches them. Centralizing this
+// keeps Draw's read-cache correct without every call site remembering to flag
+// it. A rejected command (ok=false) did not mutate state, so the cache stays.
+func (g *Game) apply(cmd string, payload map[string]any) (luaengine.ApplyResult, error) {
+	result, err := g.engine.Apply(cmd, payload)
+	if err == nil && result.OK {
+		g.viewsDirty = true
+	}
+	return result, err
+}
+
 // hireWorker buys the cheapest currently-purchasable worker level (the same
 // level/cost the HUD button shows - see render.HireWorkerButton), letting Lua's
 // buy_worker validate funds/level rather than duplicating that logic here.
@@ -74,7 +87,7 @@ func (g *Game) hireWorker() error {
 	}
 	level, _ := workers["nextPurchasableWorkerLevel"].(float64)
 
-	result, err := g.engine.Apply("buy_worker", map[string]any{"workerLevel": level, "levelId": g.levelID})
+	result, err := g.apply("buy_worker", map[string]any{"workerLevel": level, "levelId": g.levelID})
 	if err != nil {
 		return err
 	}
