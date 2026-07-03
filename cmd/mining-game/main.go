@@ -4,6 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
+	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
 
@@ -18,7 +21,30 @@ const (
 	devSeedPhrase = "dev-seed"
 )
 
+// startPprof, if MINES_PPROF is set (e.g. "localhost:6060"), serves Go's pprof
+// endpoints on a background goroutine so a heap/goroutine profile can be
+// captured from a live windowed run with `go tool pprof
+// http://localhost:6060/debug/pprof/heap`. The authoritative Lua path and the
+// render layer were measured headlessly and hold steady at ~84MB; the
+// remaining memory growth appears on focus loss and lives outside runtime
+// MemStats (Ebitengine's GPU atlas / Metal textures), so a real profile from
+// the leaking state is the fastest way to pin the retaining path.
+func startPprof() {
+	addr := os.Getenv("MINES_PPROF")
+	if addr == "" {
+		return
+	}
+	go func() {
+		log.Printf("pprof serving on http://%s/debug/pprof/", addr)
+		if err := http.ListenAndServe(addr, nil); err != nil {
+			log.Printf("pprof server stopped: %v", err)
+		}
+	}()
+}
+
 func main() {
+	startPprof()
+
 	store, err := persistence.Open(saveDBPath)
 	if err != nil {
 		log.Fatalf("failed to open save database: %v", err)

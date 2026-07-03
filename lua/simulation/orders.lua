@@ -320,6 +320,15 @@ function M.settle(state)
     end
   end
 
+  -- ponytail: drop terminal orders so state.orders stays bounded over long
+  -- sessions (nextIds.order keeps incrementing, so new ids stay unique; the
+  -- human-readable history lives in Game.orderEventLog, not in state).
+  for id, order in pairs(state.orders) do
+    if order.state == "completed" or order.state == "expired" or order.state == "declined" then
+      state.orders[id] = nil
+    end
+  end
+
   return events
 end
 

@@ -42,6 +42,26 @@ type Game struct {
 	// index-based Accept/Decline button rects against the right order.
 	lastAvailableOrderIDs []string
 
+	// viewsDirty is set after every successful engine.Apply (tick, buy, merge,
+	// assign, order action, level creation) and cleared once Draw has
+	// re-fetched the cached view-models. Between applies the engine state is
+	// unchanged, so the 5 non-viewport reads are returned from cache instead
+	// of doing 6 Lua round-trips every frame (the main source of allocation
+	// churn and baseline memory). The level view is additionally re-fetched
+	// when the camera viewport cell range changes.
+	viewsDirty            bool
+	cachedLevelView       map[string]any
+	cachedPlayerSummary   map[string]any
+	cachedWorkers         map[string]any
+	cachedResources       map[string]any
+	cachedAvailableOrders map[string]any
+	cachedActiveOrders    map[string]any
+	lastViewportX         float64
+	lastViewportY         float64
+	lastViewportW         float64
+	lastViewportH         float64
+	hasCachedViewport     bool
+
 	// orderEventLog is a newest-first ring of human-readable order events
 	// (arrived/shipped/expired/completed), shown in the sidebar so order
 	// activity is visible in the UI itself, not just the application log.
