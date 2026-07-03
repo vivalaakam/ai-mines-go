@@ -85,6 +85,12 @@ type Game struct {
 	// focus state machine (see gamepad.go), not this pointer.
 	pointer pointerState
 
+	// usingGamepad is true while the player last interacted via the pad
+	// rather than the mouse; it picks which hover source feeds the cell
+	// tooltip. lastMousePos detects mouse movement to hand control back.
+	usingGamepad bool
+	lastMousePos image.Point
+
 	// Gamepad focus/cursor state (gamepad.go):
 	//   focus         - which surface the pad drives: map, orders, or hire
 	//   cursorCell    - world cell under the map cell-cursor

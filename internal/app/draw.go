@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"image"
 	"image/color"
 	"log"
 	"math"
@@ -89,9 +90,23 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		DraggingWorkerID: g.draggingWorkerID,
 		SelectedWorkerID: g.selectedWorkerID,
 		MergeConfirm:     mergeConfirm,
+		HoverPos:         g.gamepadHoverPos(),
 	})
 
 	g.drawGamepadOverlays(screen)
+}
+
+// gamepadHoverPos returns the screen-space center of the gamepad cell cursor
+// so render draws the cell tooltip over it, or nil to fall back to the mouse.
+func (g *Game) gamepadHoverPos() *image.Point {
+	if !g.usingGamepad || g.focus != focusMap || !g.cursorInit {
+		return nil
+	}
+	x, y, size, ok := g.gamepadCursorScreenPos()
+	if !ok {
+		return nil
+	}
+	return &image.Point{X: int(x) + int(size)/2, Y: int(y) + int(size)/2}
 }
 
 // drawGamepadOverlays draws the gamepad-only UI: the map cell-cursor, the

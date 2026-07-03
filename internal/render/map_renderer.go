@@ -69,6 +69,9 @@ func drawMap(screen *ebiten.Image, vm ViewModel) {
 // workers to it. Reads the cursor directly (Draw-time input read, no mutation).
 func drawHoveredCell(screen *ebiten.Image, vm ViewModel, cells []any, size float32) {
 	mx, my := ebiten.CursorPosition()
+	if vm.HoverPos != nil {
+		mx, my = vm.HoverPos.X, vm.HoverPos.Y
+	}
 	cellX, cellY := ScreenToCell(mx, my, vm.Camera)
 
 	var hovered map[string]any

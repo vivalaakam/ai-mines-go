@@ -107,14 +107,35 @@ func (g *Game) pollGamepad(s *InputState) {
 		gp.b = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightRight)
 		gp.selectBtn = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonCenterLeft)
 		gp.r2 = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonFrontBottomRight)
+
+		// Any pad activity this frame claims hover/tooltip focus for the pad
+		// until the mouse moves again (syncPointer hands it back).
+		if sticksActive(gp) || gp.a || gp.b || gp.selectBtn || gp.r2 || gp.dpadUp || gp.dpadDown {
+			g.usingGamepad = true
+		}
 		break
 	}
 	s.Gamepad = gp
 }
 
-// syncPointer snapshots the mouse into g.pointer for drag.go/update.go.
+// sticksActive reports whether any stick is deflected past the deadzone.
+func sticksActive(gp gamepadInput) bool {
+	const d = stickDeadzone
+	return gp.leftX > d || gp.leftX < -d ||
+		gp.leftY > d || gp.leftY < -d ||
+		gp.rightX > d || gp.rightX < -d ||
+		gp.rightY > d || gp.rightY < -d
+}
+
+// syncPointer snapshots the mouse into g.pointer for drag.go/update.go, and
+// hands hover focus back to the mouse when it moves.
 func (g *Game) syncPointer() {
 	mx, my := ebiten.CursorPosition()
+	mousePos := image.Pt(mx, my)
+	if mousePos != g.lastMousePos {
+		g.usingGamepad = false
+	}
+	g.lastMousePos = mousePos
 	g.pointer = pointerState{
 		pos:          image.Pt(mx, my),
 		justPressed:  inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
