@@ -35,6 +35,7 @@ function M.new_game(seedPhrase)
     workers = {},
     storages = {},
     orders = {},
+    orderArrivalMisses = 0,
     nextIds = { worker = 1, storage = 1, order = 1, level = 1 },
   }
 
@@ -102,6 +103,7 @@ function M.load_state(state)
       end
     end
   end
+  copy.orderArrivalMisses = copy.orderArrivalMisses or 0
 
   return copy
 end

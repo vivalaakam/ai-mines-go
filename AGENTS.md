@@ -453,9 +453,10 @@ when the order is generated; `rewardMoney` is the order's full value
 New orders arrive periodically: on every tick divisible by
 `orderArrivalIntervalTicks` (default 100) there is an `orderArrivalChance`
 (default 0.5) roll — deterministic from seedPhrase + tick — for one new order,
-as long as fewer than `maxAvailableOrders` (default 3) are available. A new
-game seeds the pool once; accepting/declining an order does not instantly
-refill it.
+as long as fewer than `maxAvailableOrders` (default 3) are available. To avoid
+long deterministic droughts, `orderArrivalMaxMisses` (default 3) guarantees an
+arrival after that many missed eligible boundary rolls. A new game seeds the
+pool once; accepting/declining an order does not instantly refill it.
 
 Order states:
 

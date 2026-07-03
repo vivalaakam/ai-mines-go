@@ -308,7 +308,13 @@ function M.settle(state)
 
   if tick % rules.orderArrivalIntervalTicks == 0 and available_count(state) < rules.maxAvailableOrders then
     local rng = RNG.new(RNG.hash_seed(state.seedPhrase, "order_arrival", tostring(tick)))
-    if rng:next() < rules.orderArrivalChance then
+    local arrival = rng:next() < rules.orderArrivalChance
+    if not arrival then
+      state.orderArrivalMisses = (state.orderArrivalMisses or 0) + 1
+      arrival = state.orderArrivalMisses >= rules.orderArrivalMaxMisses
+    end
+    if arrival then
+      state.orderArrivalMisses = 0
       local order = generate_order(state)
       events[#events + 1] = { type = "order_arrived", orderId = order.id }
     end

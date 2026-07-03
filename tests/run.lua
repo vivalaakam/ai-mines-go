@@ -421,6 +421,24 @@ test("orders: declining does not refill the pool; new orders arrive on 100-tick 
   )
 end)
 
+test("orders: arrival miss streak is capped by rulesConfig.orderArrivalMaxMisses", function()
+  engine.new_game("orders-arrival-pity-seed")
+  local state = engine.export_state()
+  state.rulesConfig.orderArrivalChance = 0
+  state.rulesConfig.orderArrivalMaxMisses = 3
+  engine.load_state(state)
+
+  for _, order in ipairs(engine.read({ type = "get_available_orders" }).data.orders) do
+    assert(engine.apply({ type = "decline_order", orderId = order.id }).ok, "decline_order failed")
+  end
+
+  engine.apply({ type = "tick", ticksPassed = 299 })
+  assert_eq(#engine.read({ type = "get_available_orders" }).data.orders, 0, "no guaranteed arrival before third miss")
+
+  engine.apply({ type = "tick", ticksPassed = 1 })
+  assert_eq(#engine.read({ type = "get_available_orders" }).data.orders, 1, "third missed boundary guarantees arrival")
+end)
+
 test("orders: accepted order ships partially every 50 ticks and pays per shipped unit", function()
   engine.new_game("orders-shipment-seed")
   local target = engine.read({ type = "get_available_orders" }).data.orders[1]
