@@ -160,14 +160,16 @@ func (g *Game) listMove(gp gamepadInput) int {
 	return 0
 }
 
-// initCursor places the cell cursor at the map center the first time it's
-// available (waits until Draw has populated mapBounds).
+// initCursor places the cell cursor at the center of the currently visible
+// viewport the first time it runs, so the cursor is always on screen wherever
+// the camera happens to be. Uses the camera (always available) rather than
+// mapBounds (only populated by Draw), so the cursor appears on frame 1.
 func (g *Game) initCursor() {
-	if g.cursorInit || g.mapBounds == nil {
+	if g.cursorInit {
 		return
 	}
-	g.cursorCellX = math.Floor((g.mapBounds.MinX + g.mapBounds.MaxX) / 2)
-	g.cursorCellY = math.Floor((g.mapBounds.MinY + g.mapBounds.MaxY) / 2)
+	g.cursorCellX = math.Floor((g.camera.X + (render.MapWidth/g.camera.Zoom)/2) / render.TileSize)
+	g.cursorCellY = math.Floor((g.camera.Y + (render.ScreenHeight/g.camera.Zoom)/2) / render.TileSize)
 	g.cursorInit = true
 }
 
