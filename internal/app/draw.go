@@ -96,31 +96,24 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.drawGamepadOverlays(screen)
 }
 
-// gamepadHoverPos returns the unified cursor position so render draws the cell
-// highlight + tooltip over the cell the pad/mouse is pointing at, or nil to
-// fall back to the raw OS mouse cursor (no gamepad connected).
+// gamepadHoverPos returns the screen-space center of the tile cursor so render
+// draws the single highlighted-tile square + tooltip over it (the cursor IS
+// the tile, one square — no separate reticle). nil falls back to the mouse.
 func (g *Game) gamepadHoverPos() *image.Point {
-	if !g.gamepadPresent || !g.cursorInit {
+	if !g.gamepadPresent || g.focus != focusMap || !g.cursorInit {
 		return nil
 	}
-	return &g.cursor
+	x, y, size, ok := g.gamepadCursorScreenPos()
+	if !ok {
+		return nil
+	}
+	return &image.Point{X: int(x) + int(size)/2, Y: int(y) + int(size)/2}
 }
 
-// drawGamepadOverlays draws the gamepad-only UI: the unified cursor reticle
-// (the one visible pointer entity while a pad is connected — the OS cursor is
-// hidden, see update.go), the orders-panel selection highlight, and the
-// hire-select modal. The cell highlight + tooltip under the cursor come from
-// render via HoverPos, not a second rect here.
+// drawGamepadOverlays draws the gamepad-only UI: the orders-panel selection
+// highlight and the hire-select modal. The map cursor (the highlighted tile)
+// is drawn by render via HoverPos — exactly one square, no second reticle.
 func (g *Game) drawGamepadOverlays(screen *ebiten.Image) {
-	if g.gamepadPresent && g.cursorInit {
-		// Small reticle marks the exact pixel of the single cursor entity;
-		// the cell it falls in is highlighted separately by render.
-		const s = 5
-		x := float32(g.cursor.X) - s
-		y := float32(g.cursor.Y) - s
-		vector.StrokeRect(screen, x, y, s*2, s*2, 2, color.RGBA{255, 255, 255, 255}, false)
-	}
-
 	hl := color.RGBA{255, 230, 0, 255}
 	if g.focus == focusOrders && g.orderSel >= 0 && g.orderSel < len(g.lastAvailableOrderIDs) {
 		r := render.AvailableOrderRow(g.orderSel)

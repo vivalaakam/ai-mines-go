@@ -5,6 +5,8 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
+
+	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
 
 // InputState is a snapshot of this frame's raw input, decoupled from ebiten so
@@ -28,13 +30,15 @@ type pointerState struct {
 // gamepadInput is one frame of raw state from the first connected
 // standard-layout gamepad. Sticks are deadzoned floats in [-1,1]; buttons are
 // just-pressed edges except dpadUp/dpadDown which are held (so zoom/list repeat
-// can be driven off them with a cooldown). aReleased is the A just-released
-// edge so the pad's A can feed the same press/release click flow as the mouse.
+// can be driven off them with a cooldown). mouseClick echoes the mouse
+// just-pressed edge so that, while a pad is connected, a mouse click acts on
+// the highlighted tile through the same mapCursorAction path as A.
 type gamepadInput struct {
-	present                        bool
-	leftX, leftY, rightX, rightY   float64
-	a, aReleased, b, selectBtn, r2 bool
-	dpadUp, dpadDown               bool
+	present                      bool
+	leftX, leftY, rightX, rightY float64
+	a, b, selectBtn, r2          bool
+	mouseClick                   bool
+	dpadUp, dpadDown             bool
 }
 
 const (
@@ -43,7 +47,6 @@ const (
 	stickPanSpeed     = cameraPanSpeed * 5
 	dpadZoomSpeed     = 0.02
 	stickActThreshold = 0.5 // deflection above which a stick "acts" (move cursor / navigate list)
-	cursorStickSpeed  = 8.0 // px/frame the left stick moves the unified cursor
 )
 
 // syncGamepads tracks connected gamepad IDs, mirroring the ebiten gamepad
@@ -110,23 +113,22 @@ func (g *Game) pollGamepad(s *InputState) {
 		gp.dpadUp = ebiten.IsStandardGamepadButtonPressed(id, ebiten.StandardGamepadButtonLeftTop)
 		gp.dpadDown = ebiten.IsStandardGamepadButtonPressed(id, ebiten.StandardGamepadButtonLeftBottom)
 		gp.a = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightBottom)
-		gp.aReleased = inpututil.IsStandardGamepadButtonJustReleased(id, ebiten.StandardGamepadButtonRightBottom)
 		gp.b = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightRight)
 		gp.selectBtn = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonCenterLeft)
 		gp.r2 = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonFrontBottomRight)
 		break
 	}
+	gp.mouseClick = inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
 	s.Gamepad = gp
 	g.gamepadPresent = gp.present
 }
 
 // syncPointer builds this frame's g.pointer. With a gamepad connected the
-// pointer is the single cursor entity g.cursor: mouse motion moves it, the
-// left stick moves it (gamepad.go), and both the mouse button and the pad's A
-// feed its press/release edges — so a mouse click and an A click hit the same
-// spot. Without a gamepad it just tracks the OS mouse cursor. g.cursor is
-// initialized to the current mouse position the first time a pad appears, so
-// taking the pad never makes the pointer jump.
+// single cursor is the highlighted tile (cursorCell): mouse motion snaps it to
+// the cell under the mouse, the left stick steps it (gamepad.go), and A/mouse
+// clicks act on it via mapCursorAction — so g.pointer is zeroed to keep
+// drag.go / UI hit-testing from double-acting. Without a gamepad g.pointer
+// just tracks the OS mouse cursor and drag.go handles clicks/drags normally.
 func (g *Game) syncPointer(gp gamepadInput) {
 	mx, my := ebiten.CursorPosition()
 	mousePos := image.Pt(mx, my)
@@ -134,27 +136,23 @@ func (g *Game) syncPointer(gp gamepadInput) {
 	mouseReleased := inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft)
 
 	if gp.present {
-		if !g.cursorInit {
-			g.cursor = mousePos
+		if mousePos != g.lastMousePos {
+			// Mouse moved: the tile follows the mouse — same entity, both
+			// inputs drive it.
+			cx, cy := render.ScreenToCell(mx, my, g.renderCamera())
+			g.cursorCellX, g.cursorCellY = cx, cy
+			g.clampCursorCell()
 			g.cursorInit = true
-		} else if mousePos != g.lastMousePos {
-			g.cursor = mousePos
 		}
 		g.lastMousePos = mousePos
-		// A is a pointer click only on the map (select/place/merge via drag.go).
-		// In orders/hire focus A is consumed by the list handlers in gamepad.go,
-		// so it must not also register as a mouse click there.
-		aClicks := g.focus == focusMap
-		g.pointer = pointerState{
-			pos:          g.cursor,
-			justPressed:  mousePressed || (aClicks && gp.a),
-			justReleased: mouseReleased || (aClicks && gp.aReleased),
-		}
+		// Pad mode: the tile is the cursor. Suppress the mouse pointer so the
+		// drag.go/UI click paths don't fire; A and mouse-click both go through
+		// mapCursorAction in gamepad.go.
+		g.pointer = pointerState{}
 		return
 	}
 
-	// No gamepad: pure mouse. Drop the cursor entity so a reconnect re-inits
-	// it at the mouse instead of wherever the stick last left it.
+	// No gamepad: pure mouse. Drop the tile so a reconnect re-inits it.
 	g.cursorInit = false
 	g.pointer = pointerState{
 		pos:          mousePos,

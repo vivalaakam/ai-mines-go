@@ -80,20 +80,23 @@ type Game struct {
 	gamepadIDs    map[ebiten.GamepadID]struct{}
 	gamepadIDsBuf []ebiten.GamepadID
 
-	// pointer is this frame's unified pointer, consumed by update.go/drag.go
-	// for click interactions. With a gamepad connected it sits at g.cursor
-	// (driven by both the mouse and the left stick — one entity, see
-	// input.go); without one it follows the OS mouse cursor directly.
+	// pointer is this frame's mouse pointer, consumed by update.go/drag.go for
+	// click interactions. It is only used when no gamepad is connected; while a
+	// pad is connected the highlighted tile is the single cursor and A/mouse
+	// clicks act on it via gamepad.go's mapCursorAction, so g.pointer is zeroed
+	// to keep drag.go / UI hit-testing from double-acting.
 	pointer pointerState
 
-	// cursor is the single on-screen pointer entity used while a gamepad is
-	// connected: the mouse moves it on mouse motion, the left stick moves it
-	// in pixels (gamepad.go), and A clicks through g.pointer exactly like a
-	// mouse click. lastMousePos detects mouse motion so the mouse can drive
-	// the same entity. gamepadPresent hides the OS cursor (one cursor, not
-	// two) and gates the drawn reticle + cell tooltip.
-	cursor         image.Point
+	// cursorCell is the single map cursor: the highlighted tile. The left
+	// stick steps it one cell at a time (gamepad.go); mouse motion snaps it to
+	// the cell under the mouse — one entity driven by both inputs.
+	// gamepadPresent hides the OS cursor so only the tile is visible (no
+	// two-cursor overlap on mouse+pad). lastMousePos detects mouse motion to
+	// snap the tile to the mouse. cursorCD paces stick cell-stepping.
+	cursorCellX    float64
+	cursorCellY    float64
 	cursorInit     bool
+	cursorCD       int
 	gamepadPresent bool
 	cursorHidden   bool
 	lastMousePos   image.Point

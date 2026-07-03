@@ -2,11 +2,9 @@ package app
 
 import (
 	"fmt"
-	"image"
 	"testing"
 
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
-	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
 
 // TestGamepadOrderIndexActions exercises the gamepad orders-focus handlers
@@ -113,10 +111,9 @@ func TestGamepadHirePanel(t *testing.T) {
 	}
 }
 
-// TestGamepadMapCursorSelectsWorker exercises the unified cursor's A action on
-// the map: with the cursor on a worker's cell, an A press/release (fed through
-// g.pointer exactly like a mouse click) selects the worker via the same
-// handleWorkerDrag/handleWorkerClick flow the mouse uses.
+// TestGamepadMapCursorSelectsWorker exercises the tile cursor's A action on
+// the map: with the cursor tile on a worker's cell, mapCursorAction selects
+// the worker via the same handleWorkerClick flow the mouse uses.
 func TestGamepadMapCursorSelectsWorker(t *testing.T) {
 	engine, err := luaengine.New()
 	if err != nil {
@@ -151,30 +148,17 @@ func TestGamepadMapCursorSelectsWorker(t *testing.T) {
 	if posCellID == "" {
 		t.Skip("worker has no positionCellId; cursor test needs a placed worker")
 	}
-	// positionCellId is "x,y"; the camera starts at (0,0) zoom=1, so the
-	// worker's screen position is its cell * TileSize. Point the unified
-	// cursor there.
+	// positionCellId is "x,y"; place the tile cursor on that cell.
 	var cx, cy float64
 	if n, _ := fmt.Sscanf(posCellID, "%f,%f", &cx, &cy); n != 2 {
 		t.Fatalf("could not parse positionCellId %q", posCellID)
 	}
-	game.focus = focusMap
-	game.gamepadPresent = true
+	game.cursorCellX = cx
+	game.cursorCellY = cy
 	game.cursorInit = true
-	game.cursor = image.Pt(int(cx*render.TileSize), int(cy*render.TileSize))
 
-	// A press, then A release — the same edges syncPointer would build from
-	// gp.a / gp.aReleased in focusMap.
-	game.pointer = pointerState{pos: game.cursor, justPressed: true}
-	if err := game.handleWorkerDrag(); err != nil {
-		t.Fatalf("handleWorkerDrag (press) error: %v", err)
-	}
-	game.pointer = pointerState{pos: game.cursor, justReleased: true}
-	if err := game.handleWorkerDrag(); err != nil {
-		t.Fatalf("handleWorkerDrag (release) error: %v", err)
-	}
-
+	game.mapCursorAction()
 	if game.selectedWorkerID != w["id"] {
-		t.Fatalf("A on worker cell selected %q, want %q", game.selectedWorkerID, w["id"])
+		t.Fatalf("mapCursorAction() selected %q, want %q", game.selectedWorkerID, w["id"])
 	}
 }
