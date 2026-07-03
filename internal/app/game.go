@@ -80,35 +80,35 @@ type Game struct {
 	gamepadIDs    map[ebiten.GamepadID]struct{}
 	gamepadIDsBuf []ebiten.GamepadID
 
-	// pointer is this frame's mouse pointer, consumed by update.go/drag.go
-	// for click interactions. The gamepad uses a separate cell-cursor +
-	// focus state machine (see gamepad.go), not this pointer.
+	// pointer is this frame's unified pointer, consumed by update.go/drag.go
+	// for click interactions. With a gamepad connected it sits at g.cursor
+	// (driven by both the mouse and the left stick — one entity, see
+	// input.go); without one it follows the OS mouse cursor directly.
 	pointer pointerState
 
-	// usingGamepad is true while the player last interacted via the pad
-	// rather than the mouse; it picks which hover source feeds the cell
-	// tooltip. lastMousePos detects mouse movement to hand control back.
-	usingGamepad bool
-	lastMousePos image.Point
+	// cursor is the single on-screen pointer entity used while a gamepad is
+	// connected: the mouse moves it on mouse motion, the left stick moves it
+	// in pixels (gamepad.go), and A clicks through g.pointer exactly like a
+	// mouse click. lastMousePos detects mouse motion so the mouse can drive
+	// the same entity. gamepadPresent hides the OS cursor (one cursor, not
+	// two) and gates the drawn reticle + cell tooltip.
+	cursor         image.Point
+	cursorInit     bool
+	gamepadPresent bool
+	cursorHidden   bool
+	lastMousePos   image.Point
 
-	// Gamepad focus/cursor state (gamepad.go):
+	// Gamepad focus/list state (gamepad.go):
 	//   focus         - which surface the pad drives: map, orders, or hire
-	//   cursorCell    - world cell under the map cell-cursor
-	//   cursorInit    - cursorCell has been placed (waits for mapBounds)
-	//   cursorCD      - frames until the stick can move the cursor another cell
 	//   orderSel      - highlighted available-order index (orders focus)
 	//   hireSel       - highlighted purchasable-worker index (hire focus)
 	//   hireLevels    - cached purchasable levels while the hire panel is open
 	//   listCD        - frames until a held up/down advances the list again
-	focus       focusMode
-	cursorCellX float64
-	cursorCellY float64
-	cursorInit  bool
-	cursorCD    int
-	orderSel    int
-	hireSel     int
-	hireLevels  []hireLevel
-	listCD      int
+	focus      focusMode
+	orderSel   int
+	hireSel    int
+	hireLevels []hireLevel
+	listCD     int
 }
 
 // focusMode is which surface the gamepad currently drives. Mouse input is

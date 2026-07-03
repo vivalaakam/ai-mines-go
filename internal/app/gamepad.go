@@ -8,14 +8,15 @@ import (
 )
 
 // Cooldowns: how many frames a held direction must wait before repeating.
-// ponytail: tuned by feel — lower = snappier cursor/lists, higher = less skip.
+// ponytail: tuned by feel — lower = snappier lists, higher = less skip.
 const (
-	cursorMoveInterval = 6
-	listMoveInterval   = 8
+	listMoveInterval = 8
 )
 
-// handleGamepad dispatches gamepad actions by the current focus. Mouse input
-// is independent and unaffected; this only interprets the pad.
+// handleGamepad dispatches gamepad actions by the current focus. The mouse and
+// the pad share one pointer entity (g.cursor, see input.go); A is already fed
+// through g.pointer as a click, so this only handles focus-specific pad input
+// (cursor movement on the map, list navigation in orders/hire).
 func (g *Game) handleGamepad(gp gamepadInput) {
 	if !gp.present {
 		return
@@ -30,13 +31,13 @@ func (g *Game) handleGamepad(gp gamepadInput) {
 	}
 }
 
-// handleGamepadMap drives the cell cursor over the map. Left stick moves the
-// cursor one cell at a time (with a cooldown); A selects/places/merges the
-// worker under the cursor; B cancels a pending merge or selection; Select
-// opens the hire panel; R2 switches focus to the orders panel.
+// handleGamepadMap drives the unified cursor over the map. The left stick
+// moves g.cursor in pixels (the cell under it is highlighted + tooltip'd via
+// HoverPos in draw.go, so it reads as a cell cursor); A is a click through
+// g.pointer (drag.go: select/place/merge, same as the mouse); B cancels a
+// pending merge or selection; Select opens the hire panel; R2 switches focus
+// to the orders panel.
 func (g *Game) handleGamepadMap(gp gamepadInput) {
-	g.initCursor()
-
 	if gp.selectBtn {
 		g.openHire()
 		return
@@ -54,43 +55,29 @@ func (g *Game) handleGamepadMap(gp gamepadInput) {
 		}
 		return
 	}
-	if gp.a {
-		g.mapCursorAction()
-		return
-	}
+	// A is handled by g.pointer/drag.go — nothing to do here for A.
 
-	if g.cursorCD > 0 {
-		g.cursorCD--
+	if math.Abs(gp.leftX) > stickActThreshold {
+		g.cursor.X += int(gp.leftX * cursorStickSpeed)
 	}
-	if math.Abs(gp.leftX) <= stickActThreshold && math.Abs(gp.leftY) <= stickActThreshold {
-		return
+	if math.Abs(gp.leftY) > stickActThreshold {
+		g.cursor.Y += int(gp.leftY * cursorStickSpeed)
 	}
-	if g.cursorCD > 0 {
-		return
-	}
-	if math.Abs(gp.leftX) >= math.Abs(gp.leftY) {
-		g.cursorCellX += math.Copysign(1, gp.leftX)
-	} else {
-		g.cursorCellY += math.Copysign(1, gp.leftY)
-	}
-	g.clampCursorCell()
-	g.cursorCD = cursorMoveInterval
+	g.clampCursorPoint()
 }
 
-// mapCursorAction is the A button on the map: confirm a pending merge if the
-// modal is open, otherwise feed the cell under the cursor through the same
-// click-to-select "cut/paste" flow the mouse uses (handleWorkerClick).
-func (g *Game) mapCursorAction() {
-	if g.lastLevelView == nil {
-		return
+// clampCursorPoint keeps the unified cursor inside the logical screen so the
+// stick can never shove it off the clickable area.
+func (g *Game) clampCursorPoint() {
+	if g.cursor.X < 0 {
+		g.cursor.X = 0
+	} else if g.cursor.X > render.ScreenWidth {
+		g.cursor.X = render.ScreenWidth
 	}
-	if g.pendingMerge != nil {
-		g.confirmPendingMerge()
-		return
-	}
-	cx, cy := g.cursorCellX, g.cursorCellY
-	if err := g.handleWorkerClick(workerAtCell(g.lastLevelView, cx, cy), cx, cy); err != nil {
-		log.Printf("gamepad map action failed: %v", err)
+	if g.cursor.Y < 0 {
+		g.cursor.Y = 0
+	} else if g.cursor.Y > render.ScreenHeight {
+		g.cursor.Y = render.ScreenHeight
 	}
 }
 
@@ -158,37 +145,6 @@ func (g *Game) listMove(gp gamepadInput) int {
 		return 1
 	}
 	return 0
-}
-
-// initCursor places the cell cursor at the center of the currently visible
-// viewport the first time it runs, so the cursor is always on screen wherever
-// the camera happens to be. Uses the camera (always available) rather than
-// mapBounds (only populated by Draw), so the cursor appears on frame 1.
-func (g *Game) initCursor() {
-	if g.cursorInit {
-		return
-	}
-	g.cursorCellX = math.Floor((g.camera.X + (render.MapWidth/g.camera.Zoom)/2) / render.TileSize)
-	g.cursorCellY = math.Floor((g.camera.Y + (render.ScreenHeight/g.camera.Zoom)/2) / render.TileSize)
-	g.cursorInit = true
-}
-
-func (g *Game) clampCursorCell() {
-	if g.mapBounds == nil {
-		return
-	}
-	if g.cursorCellX < g.mapBounds.MinX {
-		g.cursorCellX = g.mapBounds.MinX
-	}
-	if g.cursorCellX > g.mapBounds.MaxX {
-		g.cursorCellX = g.mapBounds.MaxX
-	}
-	if g.cursorCellY < g.mapBounds.MinY {
-		g.cursorCellY = g.mapBounds.MinY
-	}
-	if g.cursorCellY > g.mapBounds.MaxY {
-		g.cursorCellY = g.mapBounds.MaxY
-	}
 }
 
 func (g *Game) clampOrderSelection() {
@@ -261,24 +217,6 @@ func (g *Game) buyWorkerLevel(level float64) {
 	}
 }
 
-// confirmPendingMerge merges the pending pair (the Yes branch of the merge
-// modal), used by the gamepad A button while the modal is open.
-func (g *Game) confirmPendingMerge() {
-	merge := g.pendingMerge
-	g.pendingMerge = nil
-	if merge == nil {
-		return
-	}
-	result, err := g.apply("merge_workers", map[string]any{"workerIds": []any{merge.WorkerA, merge.WorkerB}})
-	if err != nil {
-		log.Printf("merge_workers error: %v", err)
-		return
-	}
-	if !result.OK {
-		log.Printf("merge_workers rejected: %+v", result.Error)
-	}
-}
-
 // acceptOrderAtIndex / declineOrderAtIndex send the indexed order's command
 // to Lua. Shared by the gamepad orders focus and mouse click hit-testing.
 func (g *Game) acceptOrderAtIndex(i int) {
@@ -307,15 +245,4 @@ func (g *Game) declineOrderAtIndex(i int) {
 	if !result.OK {
 		log.Printf("decline_order rejected: %+v", result.Error)
 	}
-}
-
-// gamepadCursorScreenPos returns the screen-space top-left of the cell cursor
-// tile and its size, for drawing. Returns ok=false if the cursor isn't ready.
-func (g *Game) gamepadCursorScreenPos() (x, y, size float32, ok bool) {
-	if !g.cursorInit {
-		return 0, 0, 0, false
-	}
-	sx := (g.cursorCellX*render.TileSize - g.camera.X) * g.camera.Zoom
-	sy := (g.cursorCellY*render.TileSize - g.camera.Y) * g.camera.Zoom
-	return float32(sx), float32(sy), float32(render.TileSize * g.camera.Zoom), true
 }

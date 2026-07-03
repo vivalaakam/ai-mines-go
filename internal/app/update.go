@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/hajimehoshi/ebiten/v2"
+
 	"github.com/vivalaakam/ai-mines-go/internal/luaengine"
 	"github.com/vivalaakam/ai-mines-go/internal/render"
 )
@@ -20,6 +22,19 @@ const orderEventLogCap = 20
 func (g *Game) Update() error {
 	g.syncGamepads()
 	input := g.pollInput()
+	// Hide the OS cursor while a gamepad is connected so only the single
+	// unified cursor entity (g.cursor, drawn in draw.go) is visible — the
+	// two-overlapping-cursors bug on mouse+pad (e.g. Steam Deck). Tracked so
+	// we only touch the mode on a change, not every frame.
+	wantHidden := g.gamepadPresent
+	if wantHidden != g.cursorHidden {
+		if wantHidden {
+			ebiten.SetCursorMode(ebiten.CursorModeHidden)
+		} else {
+			ebiten.SetCursorMode(ebiten.CursorModeVisible)
+		}
+		g.cursorHidden = wantHidden
+	}
 	g.camera.Move(input.CameraDX, input.CameraDY)
 	zoomDelta := input.ZoomDelta
 	if input.Gamepad.present && g.focus == focusMap {

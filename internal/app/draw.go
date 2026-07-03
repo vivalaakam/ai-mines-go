@@ -96,31 +96,32 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	g.drawGamepadOverlays(screen)
 }
 
-// gamepadHoverPos returns the screen-space center of the gamepad cell cursor
-// so render draws the cell tooltip over it, or nil to fall back to the mouse.
+// gamepadHoverPos returns the unified cursor position so render draws the cell
+// highlight + tooltip over the cell the pad/mouse is pointing at, or nil to
+// fall back to the raw OS mouse cursor (no gamepad connected).
 func (g *Game) gamepadHoverPos() *image.Point {
-	if !g.usingGamepad || g.focus != focusMap || !g.cursorInit {
+	if !g.gamepadPresent || !g.cursorInit {
 		return nil
 	}
-	x, y, size, ok := g.gamepadCursorScreenPos()
-	if !ok {
-		return nil
-	}
-	return &image.Point{X: int(x) + int(size)/2, Y: int(y) + int(size)/2}
+	return &g.cursor
 }
 
-// drawGamepadOverlays draws the gamepad-only UI: the map cell-cursor, the
-// orders-panel selection highlight, and the hire-select modal. Each only
-// renders in its focus mode.
+// drawGamepadOverlays draws the gamepad-only UI: the unified cursor reticle
+// (the one visible pointer entity while a pad is connected — the OS cursor is
+// hidden, see update.go), the orders-panel selection highlight, and the
+// hire-select modal. The cell highlight + tooltip under the cursor come from
+// render via HoverPos, not a second rect here.
 func (g *Game) drawGamepadOverlays(screen *ebiten.Image) {
-	hl := color.RGBA{255, 230, 0, 255}
-
-	if g.focus == focusMap {
-		if x, y, size, ok := g.gamepadCursorScreenPos(); ok {
-			vector.StrokeRect(screen, x, y, size, size, 2, hl, false)
-		}
+	if g.gamepadPresent && g.cursorInit {
+		// Small reticle marks the exact pixel of the single cursor entity;
+		// the cell it falls in is highlighted separately by render.
+		const s = 5
+		x := float32(g.cursor.X) - s
+		y := float32(g.cursor.Y) - s
+		vector.StrokeRect(screen, x, y, s*2, s*2, 2, color.RGBA{255, 255, 255, 255}, false)
 	}
 
+	hl := color.RGBA{255, 230, 0, 255}
 	if g.focus == focusOrders && g.orderSel >= 0 && g.orderSel < len(g.lastAvailableOrderIDs) {
 		r := render.AvailableOrderRow(g.orderSel)
 		vector.StrokeRect(screen, float32(r.Min.X)-2, float32(r.Min.Y)-2, float32(r.Dx())+4, float32(r.Dy())+4, 2, hl, false)

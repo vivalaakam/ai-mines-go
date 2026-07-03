@@ -15,9 +15,10 @@ type InputState struct {
 	Gamepad            gamepadInput
 }
 
-// pointerState is the mouse pointer for one frame. drag.go reads it instead of
-// ebiten.CursorPosition()+mouse buttons directly. (The gamepad uses a separate
-// cell-cursor + focus state machine in gamepad.go, not this pointer.)
+// pointerState is the unified pointer for one frame. drag.go reads it instead
+// of ebiten.CursorPosition()+mouse buttons directly. With a gamepad connected
+// it sits at g.cursor (mouse + left stick drive one entity); without one it
+// tracks the OS mouse cursor.
 type pointerState struct {
 	pos          image.Point
 	justPressed  bool
@@ -27,12 +28,13 @@ type pointerState struct {
 // gamepadInput is one frame of raw state from the first connected
 // standard-layout gamepad. Sticks are deadzoned floats in [-1,1]; buttons are
 // just-pressed edges except dpadUp/dpadDown which are held (so zoom/list repeat
-// can be driven off them with a cooldown).
+// can be driven off them with a cooldown). aReleased is the A just-released
+// edge so the pad's A can feed the same press/release click flow as the mouse.
 type gamepadInput struct {
-	present                      bool
-	leftX, leftY, rightX, rightY float64
-	a, b, selectBtn, r2          bool
-	dpadUp, dpadDown             bool
+	present                        bool
+	leftX, leftY, rightX, rightY   float64
+	a, aReleased, b, selectBtn, r2 bool
+	dpadUp, dpadDown               bool
 }
 
 const (
@@ -41,6 +43,7 @@ const (
 	stickPanSpeed     = cameraPanSpeed * 5
 	dpadZoomSpeed     = 0.02
 	stickActThreshold = 0.5 // deflection above which a stick "acts" (move cursor / navigate list)
+	cursorStickSpeed  = 8.0 // px/frame the left stick moves the unified cursor
 )
 
 // syncGamepads tracks connected gamepad IDs, mirroring the ebiten gamepad
@@ -80,13 +83,16 @@ func (g *Game) pollInput() InputState {
 	s.ZoomDelta = wheelY * 0.1
 
 	g.pollGamepad(&s)
-	g.syncPointer()
+	g.syncPointer(s.Gamepad)
 	return s
 }
 
 // pollGamepad reads the first connected standard-layout gamepad into s.Gamepad
 // and adds the right stick to camera pan (pan works in any focus mode so the
-// player can look around while navigating menus).
+// player can look around while navigating menus). The left stick does NOT move
+// the cursor here — that is focus-dependent (map vs list nav) and lives in
+// gamepad.go; only the A just-released edge is captured here so the pad's A
+// can feed the same press/release click flow as the mouse button.
 func (g *Game) pollGamepad(s *InputState) {
 	var gp gamepadInput
 	for id := range g.gamepadIDs {
@@ -104,42 +110,56 @@ func (g *Game) pollGamepad(s *InputState) {
 		gp.dpadUp = ebiten.IsStandardGamepadButtonPressed(id, ebiten.StandardGamepadButtonLeftTop)
 		gp.dpadDown = ebiten.IsStandardGamepadButtonPressed(id, ebiten.StandardGamepadButtonLeftBottom)
 		gp.a = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightBottom)
+		gp.aReleased = inpututil.IsStandardGamepadButtonJustReleased(id, ebiten.StandardGamepadButtonRightBottom)
 		gp.b = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonRightRight)
 		gp.selectBtn = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonCenterLeft)
 		gp.r2 = inpututil.IsStandardGamepadButtonJustPressed(id, ebiten.StandardGamepadButtonFrontBottomRight)
-
-		// Any pad activity this frame claims hover/tooltip focus for the pad
-		// until the mouse moves again (syncPointer hands it back).
-		if sticksActive(gp) || gp.a || gp.b || gp.selectBtn || gp.r2 || gp.dpadUp || gp.dpadDown {
-			g.usingGamepad = true
-		}
 		break
 	}
 	s.Gamepad = gp
+	g.gamepadPresent = gp.present
 }
 
-// sticksActive reports whether any stick is deflected past the deadzone.
-func sticksActive(gp gamepadInput) bool {
-	const d = stickDeadzone
-	return gp.leftX > d || gp.leftX < -d ||
-		gp.leftY > d || gp.leftY < -d ||
-		gp.rightX > d || gp.rightX < -d ||
-		gp.rightY > d || gp.rightY < -d
-}
-
-// syncPointer snapshots the mouse into g.pointer for drag.go/update.go, and
-// hands hover focus back to the mouse when it moves.
-func (g *Game) syncPointer() {
+// syncPointer builds this frame's g.pointer. With a gamepad connected the
+// pointer is the single cursor entity g.cursor: mouse motion moves it, the
+// left stick moves it (gamepad.go), and both the mouse button and the pad's A
+// feed its press/release edges — so a mouse click and an A click hit the same
+// spot. Without a gamepad it just tracks the OS mouse cursor. g.cursor is
+// initialized to the current mouse position the first time a pad appears, so
+// taking the pad never makes the pointer jump.
+func (g *Game) syncPointer(gp gamepadInput) {
 	mx, my := ebiten.CursorPosition()
 	mousePos := image.Pt(mx, my)
-	if mousePos != g.lastMousePos {
-		g.usingGamepad = false
+	mousePressed := inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft)
+	mouseReleased := inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft)
+
+	if gp.present {
+		if !g.cursorInit {
+			g.cursor = mousePos
+			g.cursorInit = true
+		} else if mousePos != g.lastMousePos {
+			g.cursor = mousePos
+		}
+		g.lastMousePos = mousePos
+		// A is a pointer click only on the map (select/place/merge via drag.go).
+		// In orders/hire focus A is consumed by the list handlers in gamepad.go,
+		// so it must not also register as a mouse click there.
+		aClicks := g.focus == focusMap
+		g.pointer = pointerState{
+			pos:          g.cursor,
+			justPressed:  mousePressed || (aClicks && gp.a),
+			justReleased: mouseReleased || (aClicks && gp.aReleased),
+		}
+		return
 	}
-	g.lastMousePos = mousePos
+
+	// No gamepad: pure mouse. Drop the cursor entity so a reconnect re-inits
+	// it at the mouse instead of wherever the stick last left it.
+	g.cursorInit = false
 	g.pointer = pointerState{
-		pos:          image.Pt(mx, my),
-		justPressed:  inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft),
-		justReleased: inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft),
+		pos:          mousePos,
+		justPressed:  mousePressed,
+		justReleased: mouseReleased,
 	}
 }
 
