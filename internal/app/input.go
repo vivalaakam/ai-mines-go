@@ -146,8 +146,9 @@ func (g *Game) syncPointer(gp gamepadInput) {
 		}
 		g.lastMousePos = mousePos
 
-		// Mouse running the sidebar → normal mouse, tile parked.
-		if g.cursorFromMouse && mx >= render.MapWidth {
+		// Mouse over the sidebar or a button → normal OS cursor, tile parked,
+		// so those controls are clickable.
+		if g.cursorFromMouse && g.pointerOnUI(mx, my) {
 			g.pointer = pointerState{pos: mousePos, justPressed: mousePressed, justReleased: mouseReleased}
 			return
 		}

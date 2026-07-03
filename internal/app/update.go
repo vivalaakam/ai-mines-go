@@ -58,11 +58,11 @@ func (g *Game) Update() error {
 	g.handleGamepad(input.Gamepad)
 
 	// The tile is the active cursor while a pad is connected and the player is
-	// on the map (not running the mouse over the sidebar, where it becomes a
-	// normal OS cursor). Hide the OS cursor only in tile mode so the two never
-	// overlap; tracked to set the mode only on a change.
-	mx, _ := ebiten.CursorPosition()
-	g.tileActive = g.gamepadPresent && g.focus == focusMap && (!g.cursorFromMouse || mx < render.MapWidth)
+	// on the map (not running the mouse over the sidebar or a button, where it
+	// becomes a normal OS cursor). Hide the OS cursor only in tile mode so the
+	// two never overlap; tracked to set the mode only on a change.
+	mx, my := ebiten.CursorPosition()
+	g.tileActive = g.gamepadPresent && g.focus == focusMap && (!g.cursorFromMouse || !g.pointerOnUI(mx, my))
 	if wantHidden := g.tileActive; wantHidden != g.cursorHidden {
 		if wantHidden {
 			ebiten.SetCursorMode(ebiten.CursorModeHidden)

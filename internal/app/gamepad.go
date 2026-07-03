@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image"
 	"log"
 	"math"
 
@@ -62,8 +63,8 @@ func (g *Game) handleGamepadMap(gp gamepadInput) {
 		return
 	}
 
-	mx, _ := ebiten.CursorPosition()
-	tileActive := !g.cursorFromMouse || mx < render.MapWidth
+	mx, my := ebiten.CursorPosition()
+	tileActive := !g.cursorFromMouse || !g.pointerOnUI(mx, my)
 	if tileActive && (gp.a || gp.mouseClick) {
 		g.mapCursorAction()
 		return
@@ -89,9 +90,27 @@ func (g *Game) handleGamepadMap(gp gamepadInput) {
 	g.cursorCD = cursorMoveInterval
 }
 
-// mapCursorAction is the A button (or mouse click) on the map: confirm a
-// pending merge if the modal is open, otherwise feed the tile's cell through
-// the same click-to-select "cut/paste" flow the mouse uses (handleWorkerClick).
+// pointerOnUI reports whether the screen point is over a clickable UI element
+// that should show a normal OS cursor in pad mode (the sidebar, the hire
+// button over the map, or the merge-modal Yes button while the modal is open)
+// — as opposed to plain map, where the tile is the cursor.
+func (g *Game) pointerOnUI(mx, my int) bool {
+	if mx >= render.MapWidth {
+		return true
+	}
+	if image.Pt(mx, my).In(render.HireWorkerButton) {
+		return true
+	}
+	if g.pendingMerge != nil && image.Pt(mx, my).In(render.MergeModalYesButton) {
+		return true
+	}
+	return false
+}
+
+// mapCursorAction is the A button (or a mouse click on the map) on the tile:
+// confirm a pending merge if the modal is open, otherwise feed the tile's
+// cell through the same click-to-select "cut/paste" flow the mouse uses
+// (handleWorkerClick).
 func (g *Game) mapCursorAction() {
 	if g.lastLevelView == nil {
 		return
